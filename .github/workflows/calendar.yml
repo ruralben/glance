@@ -1,7 +1,8 @@
 # Refreshes the calendar data for Glance Digital Wall Calendar.
-# Fetches the family calendars, trims them to what the TV shows, encrypts the
-# result and commits it to the "data" branch. Nothing readable is published:
-# this repository is public, and so is this job's log.
+# Fetches the family calendars (and the photo album's picture list), trims
+# them to what the display shows, encrypts the result and publishes it as the
+# single file on the "data" branch. Nothing readable is published: this
+# repository is public, and so is this job's log.
 name: Calendar
 
 on:
@@ -34,27 +35,29 @@ jobs:
       - name: Fetch the previous data file, if there is one
         run: |
           if git fetch --quiet origin data 2>/dev/null; then
-            git worktree add --quiet -B data ../data FETCH_HEAD
-          else
-            git worktree add --quiet --detach ../data
-            git -C ../data switch --quiet --orphan data
+            git show FETCH_HEAD:calendar.enc > ../old.enc 2>/dev/null || rm -f ../old.enc
           fi
-          cp ../data/calendar.enc ../old.enc 2>/dev/null || true
 
       - name: Build the data file
         env:
           BOARD_SETTINGS: ${{ secrets.BOARD_SETTINGS }}
           BOARD_KEY: ${{ secrets.BOARD_KEY }}
-        run: python tools/build_calendar.py --out ../data/calendar.enc --old ../old.enc
+        run: python tools/build_calendar.py --out ../new.enc --old ../old.enc
 
+      # The data branch is always exactly one commit holding one file. It is
+      # replaced, not added to, so the repository does not grow by a copy of
+      # the data every half hour.
       - name: Publish it
         run: |
-          cd ../data
-          git add calendar.enc
-          if git diff --cached --quiet; then
+          if [ ! -f ../new.enc ]; then
             echo "nothing to publish"
             exit 0
           fi
+          git worktree add --quiet --detach ../data
+          cd ../data
+          git switch --quiet --orphan fresh
+          cp ../new.enc calendar.enc
+          git add calendar.enc
           git -c user.name="glance" -c user.email="glance@users.noreply.github.com" \
               commit --quiet -m "Calendar data"
-          git push --quiet origin data
+          git push --quiet --force origin fresh:data

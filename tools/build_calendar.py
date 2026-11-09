@@ -19,7 +19,7 @@ the job's log is public. It prints counts and nothing else.
 
 For testing, a calendar "address" may be a path to a local .ics file.
 """
-import os, sys, json, base64, argparse, datetime, urllib.request
+import os, re, sys, json, base64, argparse, datetime, urllib.request
 from zoneinfo import ZoneInfo
 
 import icalendar
@@ -32,7 +32,8 @@ REFRESH_HOURS = 20       # rewrite at least this often, so the board can tell
 
 
 def parse_settings(text):
-    out = {"lat": None, "lon": None, "place": "", "tz": "America/Chicago", "calendars": []}
+    out = {"lat": None, "lon": None, "place": "", "tz": "America/Chicago", "calendars": [],
+           "album": ""}
     for raw in text.splitlines():
         line = raw.strip()
         if not line or line.startswith("#") or "=" not in line:
@@ -45,6 +46,8 @@ def parse_settings(text):
             out["place"] = parts[2] if len(parts) > 2 else ""
         elif key == "timezone" and val:
             out["tz"] = val
+        elif key == "photos" and val:
+            out["album"] = val
         elif key == "calendar":
             parts = [p.strip() for p in val.split("|", 2)]
             if len(parts) == 3 and parts[2]:
@@ -60,6 +63,40 @@ def fetch(addr):
     req = urllib.request.Request(addr, headers={"User-Agent": "glance"})
     with urllib.request.urlopen(req, timeout=40) as r:
         return r.read()
+
+
+MAX_PHOTOS = 300
+_PHOTO = re.compile(r'\["(https://lh3\.googleusercontent\.com/[^"\\]+)",(\d+),(\d+)')
+
+
+def album_photos(link):
+    """Picture addresses from a Google Photos album shared by link.
+
+    Google offers no supported way to read an existing album, so this reads
+    the album's share page the way a browser would and picks out the picture
+    addresses in it. It is unofficial and can stop working if Google changes
+    that page; when it does, the board keeps the last list it had.
+    """
+    if "://" not in link:                       # local file, for testing
+        with open(link, encoding="utf-8", errors="replace") as f:
+            html = f.read()
+    else:
+        req = urllib.request.Request(link, headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                          "(KHTML, like Gecko) Chrome/126.0 Safari/537.36",
+            "Accept-Language": "en-US,en;q=0.9"})
+        with urllib.request.urlopen(req, timeout=40) as r:
+            html = r.read().decode("utf-8", errors="replace")
+    seen, out = set(), []
+    for url, w, h in _PHOTO.findall(html):
+        # Skip tiny entries (profile pictures and the like).
+        if url in seen or int(w) < 400 or int(h) < 400:
+            continue
+        seen.add(url)
+        out.append(url)
+    if not out:
+        raise ValueError("no pictures found on the album page")
+    return out[:MAX_PHOTOS]
 
 
 def events_from(ics_bytes, cal_index, tz, first, last):
@@ -152,7 +189,19 @@ def main():
                               and first.isoformat() <= r.get("d", "") <= last.isoformat())
 
     events.sort(key=lambda r: (r["d"], r["t"] != "", r["t"], r["s"].lower()))
+
+    photos, photos_failed = [], False
+    if settings["album"]:
+        try:
+            photos = album_photos(settings["album"])
+            print("photo album: %d picture(s)" % len(photos))
+        except Exception as ex:
+            photos_failed = True
+            photos = (old or {}).get("photos", [])
+            print("photo album: FAILED (%s); keeping the last %d" % (type(ex).__name__, len(photos)))
+
     body = {
+        "photos": photos, "photosFailed": photos_failed,
         "tz": settings["tz"], "lat": settings["lat"], "lon": settings["lon"],
         "place": settings["place"], "from": first.isoformat(), "to": last.isoformat(),
         "calendars": [{"name": c["name"], "color": c["color"]} for c in settings["calendars"]],
