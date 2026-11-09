@@ -1,4 +1,4 @@
-"""Fetch the family calendars and write the kitchen board's encrypted data file.
+"""Fetch the family calendars and write The Daily's encrypted data file.
 
 Run by the scheduled GitHub job (.github/workflows/calendar.yml). It reads two
 secrets from the environment:
@@ -57,7 +57,7 @@ def fetch(addr):
     if "://" not in addr:                       # local file, for testing
         with open(addr, "rb") as f:
             return f.read()
-    req = urllib.request.Request(addr, headers={"User-Agent": "kitchen-board"})
+    req = urllib.request.Request(addr, headers={"User-Agent": "thedaily"})
     with urllib.request.urlopen(req, timeout=40) as r:
         return r.read()
 

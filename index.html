@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>Kitchen Board</title>
+<title>The Daily</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -269,13 +269,13 @@ body{
       .then(function(r){ if(!r.ok) throw new Error(r.status); return r.text(); })
       .then(function(text){
         return unlock(text).then(function(data){
-          try{ localStorage.setItem("kb-calendar", text); }catch(e){}
+          try{ localStorage.setItem("thedaily-calendar", text); }catch(e){}
           useCalendar(data);
         });
       })
       .catch(function(){
         if(cal) return;                          /* keep what is on screen */
-        var kept = null; try{ kept = localStorage.getItem("kb-calendar"); }catch(e){}
+        var kept = null; try{ kept = localStorage.getItem("thedaily-calendar"); }catch(e){}
         if(kept) unlock(kept).then(useCalendar).catch(function(){ noCalendar(); });
         else noCalendar();
       });
