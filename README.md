@@ -1,7 +1,5 @@
 # Kitchen Board
 
-by Ben Winchester, Rural Sociologist. November, 2026.
-
 The display on the kitchen TV: clock, weather, the family calendar and the
 Chore Factory "Next Up" list, on one page.
 

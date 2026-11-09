@@ -9,16 +9,9 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
-/* Light is the default and nothing here follows the browser or OS setting.
-   Dark is reached by the sun/moon toggle (or by theme=dark in the address the
-   TV opens, which is the toggle's choice written down ahead of time). */
+/* One palette, dark, always: this page lives on a TV. By Ben's instruction it
+   carries no author line and no light/dark switch. */
 :root{
-  --bg:#f6f8f9; --surface:#ffffff; --ink:#141e26; --ink-2:#4b5c68; --ink-3:#7e8d99;
-  --line:#dbe2e7; --line-2:#c4ced6; --accent:#0f7b8a; --accent-ink:#0a5a66;
-  --warm:#a8650a; --over:#c0392b; --due:#b9770e; --soon:#8a7a12; --photo-veil:rgba(246,248,249,.55);
-  color-scheme:light;
-}
-:root[data-theme="dark"]{
   --bg:#000000; --surface:#0b0f12; --ink:#f2f4f5; --ink-2:#b3bdc4; --ink-3:#7b8891;
   --line:#2a3238; --line-2:#3c4750; --accent:#48b0c0; --accent-ink:#7fcbd7;
   --warm:#f5c400; --over:#e2564a; --due:#f0a93b; --soon:#e8c75a; --photo-veil:rgba(0,0,0,.42);
@@ -33,29 +26,22 @@ body{
 /* Everything is sized in em from this one figure, so the board fills any
    screen shape: a 16:9 TV, or a browser window while testing. */
 .board{
-  font-size:min(1vw, 1.778vh); height:100vh; width:100vw; padding:1.2em 1.4em 1.1em;
+  /* --fit and --safe come from "margin" in config.json: some TVs crop the
+     picture's edges (overscan), and the margin pulls everything inward. */
+  font-size:calc(min(1vw, 1.778vh) * var(--fit, 1)); height:100vh; width:100vw;
+  padding:calc(1.2em + var(--safe-y, 0px)) calc(1.4em + var(--safe-x, 0px)) calc(1.1em + var(--safe-y, 0px));
   display:grid; gap:1.1em 1.4em;
   grid-template-columns:30fr 27fr 43fr;
-  grid-template-rows:auto 38fr 57fr;
-  grid-template-areas:"head head head" "clock now side" "fore fore side";
+  grid-template-rows:40fr 60fr; position:relative;
+  grid-template-areas:"clock now side" "fore fore side";
 }
 [hidden]{display:none !important}
 
-/* --- title, byline, toggle ------------------------------------------- */
-.page-head{grid-area:head; display:flex; align-items:center; gap:1em; min-height:0}
-.page-head h1{font-size:1.15em; font-weight:600; letter-spacing:.08em; text-transform:uppercase; margin:0; color:var(--ink-2)}
-.byline{font-size:.95em; color:var(--ink-3); font-style:italic; margin:0}
-.page-head .note{margin-left:auto; font-size:.95em; color:var(--due)}
-.theme-toggle{
-  flex:none; display:inline-grid; place-items:center;
-  width:2.2em; height:2.2em; border-radius:999px;
-  border:1px solid var(--line-2); background:var(--surface); color:var(--ink-2);
-  cursor:pointer; padding:0; line-height:1; font-size:1em;
-  transition:border-color .15s ease, color .15s ease, background .15s ease;
-}
-.theme-toggle:hover{border-color:var(--accent); color:var(--accent)}
-.theme-toggle:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
-.theme-toggle .glyph{font-size:1.1em; line-height:1}
+/* A quiet line for trouble only (a calendar that would not refresh). */
+.note{position:absolute; left:1.4em; bottom:.15em; font-size:.9em; color:var(--due)}
+/* Shown only when the address ends in #...&debug: what this screen reports. */
+.debug{position:fixed; left:0; top:0; z-index:9; background:#103a12; color:#d6ffd9; padding:.5em .8em;
+       font:500 max(14px, 1.4vw)/1.4 "Barlow",Arial,sans-serif; white-space:pre; border-bottom-right-radius:.4em}
 
 /* --- clock ------------------------------------------------------------ */
 .clock{grid-area:clock; min-height:0; display:flex; flex-direction:column; justify-content:center}
@@ -124,15 +110,7 @@ body{
 <body>
 <div class="board" id="board">
 
-  <header class="page-head" id="blk-head">
-    <h1>Kitchen Board</h1>
-    <p class="byline">by Ben Winchester, Rural Sociologist. November, 2026.</p>
-    <span class="note" id="note"></span>
-    <button type="button" class="theme-toggle" id="theme-toggle"
-            aria-label="Switch to dark mode" title="Switch color theme">
-      <span class="glyph" id="theme-glyph" aria-hidden="true">&#9790;</span>
-    </button>
-  </header>
+  <span class="note" id="note"></span>
 
   <section class="clock" id="blk-clock">
     <div class="date" id="date"></div>
@@ -154,44 +132,11 @@ body{
 </div>
 
 <script>
-/* The canonical toggle. Light is the default; nothing reads the OS setting. */
-(function(){
-  var KEY = 'bw-theme-kitchenboard';
-  var SUN = '☀', MOON = '☾';
-  var root = document.documentElement,
-      btn = document.getElementById('theme-toggle'),
-      glyph = document.getElementById('theme-glyph');
-
-  function current(){ return root.getAttribute('data-theme') || 'light'; }
-  function paint(){
-    var dark = current() === 'dark';
-    glyph.textContent = dark ? SUN : MOON;
-    btn.setAttribute('aria-label', dark ? 'Switch to light mode' : 'Switch to dark mode');
-  }
-  try{
-    var saved = localStorage.getItem(KEY);
-    /* A TV has no easy way to press the toggle, so the address it opens may
-       carry theme=dark. A choice made with the toggle still wins over it. */
-    var asked = (/[#&]theme=(dark|light)\b/.exec(location.hash) || [])[1];
-    if(saved === 'dark' || saved === 'light') root.setAttribute('data-theme', saved);
-    else if(asked) root.setAttribute('data-theme', asked);
-  }catch(e){}
-  paint();
-  btn.addEventListener('click', function(){
-    var next = current() === 'dark' ? 'light' : 'dark';
-    root.setAttribute('data-theme', next);
-    try{ localStorage.setItem(KEY, next); }catch(e){}
-    paint();
-  });
-})();
-</script>
-
-<script>
 (function(){
   "use strict";
   var $ = function(id){ return document.getElementById(id); };
   var MIN = 60000, HOUR = 3600000;
-  var CONFIG = { blocks:{}, photos:[], photoSeconds:90, nextUpFeed:"", nextUpDays:14, dataUrl:"" };
+  var CONFIG = { blocks:{}, photos:[], photoSeconds:90, nextUpFeed:"", nextUpDays:14, dataUrl:"", margin:0 };
   var hash = {};
   location.hash.replace(/^#/, "").split("&").forEach(function(p){
     var i = p.indexOf("="); if(i > 0) hash[p.slice(0, i)] = decodeURIComponent(p.slice(i + 1));
@@ -423,12 +368,34 @@ body{
 
   /* ---------------------------------------------------------- start ---- */
   function applyBlocks(){
-    ["head","clock","now","fore","agenda","nextup"].forEach(function(k){
+    ["clock","now","fore","agenda","nextup"].forEach(function(k){
       if(CONFIG.blocks[k] === false) $("blk-" + k).hidden = true;
     });
   }
+  /* The board never needs to know the TV's resolution: every size is a share
+     of whatever area the browser reports, so 720p, 1080p and 4K all get the
+     same picture. This panel is for seeing what a given TV does report. */
+  function showDebug(){
+    var el = document.getElementById("debug") || document.body.appendChild(document.createElement("div"));
+    el.id = "debug"; el.className = "debug";
+    var w = window.innerWidth, h = window.innerHeight, r = window.devicePixelRatio || 1;
+    var NL = String.fromCharCode(10);
+    el.textContent = [
+      "page area   " + w + " x " + h + "  (shape " + (w / h).toFixed(3) + ", 16:9 is 1.778)",
+      "pixel ratio " + r + "  ->  about " + Math.round(w * r) + " x " + Math.round(h * r) + " real pixels",
+      "screen      " + screen.width + " x " + screen.height,
+      "margin      " + CONFIG.margin + "%",
+      navigator.userAgent.replace(/^Mozilla\/5\.0 /, "").slice(0, 90)
+    ].join(NL);
+  }
+  function applyMargin(){
+    var m = Math.max(0, Math.min(10, +CONFIG.margin || 0)), b = $("board").style;
+    b.setProperty("--fit", String(1 - 2 * m / 100));
+    b.setProperty("--safe-x", m + "vw"); b.setProperty("--safe-y", m + "vh");
+  }
   function start(){
-    applyBlocks();
+    applyBlocks(); applyMargin();
+    if("debug" in hash || /(^|[#&])debug/.test(location.hash)){ showDebug(); window.addEventListener("resize", showDebug); }
     tick(); setInterval(tick, 1000);
     loadCalendar(); setInterval(loadCalendar, 10 * MIN);
     setInterval(drawAgenda, 5 * MIN);            /* dim what has finished */
