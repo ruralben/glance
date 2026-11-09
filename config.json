@@ -24,6 +24,24 @@
       "background": "#000000",
       "modules": [
         {
+          "id": "m1",
+          "type": "photos",
+          "name": "Photos",
+          "x": 1,
+          "y": 41,
+          "w": 55,
+          "h": 57,
+          "font": 1,
+          "hidden": false,
+          "opts": {
+            "source": "album",
+            "seconds": 5,
+            "fit": "cover",
+            "dim": 35,
+            "round": true
+          }
+        },
+        {
           "id": "m2",
           "type": "forecast",
           "name": "Forecast",
@@ -100,24 +118,6 @@
           "hidden": false,
           "opts": {
             "days": 14
-          }
-        },
-        {
-          "id": "m1",
-          "type": "photos",
-          "name": "Photos",
-          "x": 1,
-          "y": 41,
-          "w": 55,
-          "h": 57,
-          "font": 1,
-          "hidden": false,
-          "opts": {
-            "source": "album",
-            "seconds": 5,
-            "fit": "cover",
-            "dim": 35,
-            "round": true
           }
         }
       ]
