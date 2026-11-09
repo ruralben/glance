@@ -357,6 +357,7 @@ body{
         el.style.left = m.x + "%"; el.style.top = m.y + "%"; el.style.width = m.w + "%"; el.style.height = m.h + "%";
         el.style.zIndex = String(z + 1);
         el.style.setProperty("--f", String(+m.font || 1));
+        el.style.opacity = String(Math.max(0, Math.min(100, m.opacity == null ? 100 : +m.opacity)) / 100);
         box.appendChild(el);
         var rec = {mod:m, el:el, screen:sc.id}, k = KINDS[m.type];
         if(k.mount) k.mount(el, m, rec);
