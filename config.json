@@ -1,0 +1,14 @@
+{
+  "blocks": {
+    "head": true,
+    "clock": true,
+    "now": true,
+    "fore": true,
+    "agenda": true,
+    "nextup": true
+  },
+  "nextUpFeed": "https://gist.githubusercontent.com/ruralben/8c4eb98553f2d7134b4194169a9bff87/raw/nextup.json",
+  "nextUpDays": 14,
+  "photos": [],
+  "photoSeconds": 90
+}

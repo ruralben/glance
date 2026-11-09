@@ -1,0 +1,60 @@
+# Refreshes the kitchen board's calendar data.
+# Fetches the family calendars, trims them to what the TV shows, encrypts the
+# result and commits it to the "data" branch. Nothing readable is published:
+# this repository is public, and so is this job's log.
+name: Calendar
+
+on:
+  schedule:
+    - cron: "7,37 * * * *"     # every half hour; GitHub often runs these late
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: calendar
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: tools/requirements.txt
+
+      - run: pip install --quiet -r tools/requirements.txt
+
+      - name: Fetch the previous data file, if there is one
+        run: |
+          if git fetch --quiet origin data 2>/dev/null; then
+            git worktree add --quiet -B data ../data FETCH_HEAD
+          else
+            git worktree add --quiet --detach ../data
+            git -C ../data switch --quiet --orphan data
+          fi
+          cp ../data/calendar.enc ../old.enc 2>/dev/null || true
+
+      - name: Build the data file
+        env:
+          BOARD_SETTINGS: ${{ secrets.BOARD_SETTINGS }}
+          BOARD_KEY: ${{ secrets.BOARD_KEY }}
+        run: python tools/build_calendar.py --out ../data/calendar.enc --old ../old.enc
+
+      - name: Publish it
+        run: |
+          cd ../data
+          git add calendar.enc
+          if git diff --cached --quiet; then
+            echo "nothing to publish"
+            exit 0
+          fi
+          git -c user.name="kitchen-board" -c user.email="kitchen-board@users.noreply.github.com" \
+              commit --quiet -m "Calendar data"
+          git push --quiet origin data

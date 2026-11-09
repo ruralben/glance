@@ -1,0 +1,8 @@
+# Nothing private belongs in this repository. These are belt and braces.
+calendar.enc
+*.ics
+private/
+settings.txt
+key.txt
+tv-address.txt
+__pycache__/

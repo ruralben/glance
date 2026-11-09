@@ -1,0 +1,458 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Kitchen Board</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* Light is the default and nothing here follows the browser or OS setting.
+   Dark is reached by the sun/moon toggle (or by theme=dark in the address the
+   TV opens, which is the toggle's choice written down ahead of time). */
+:root{
+  --bg:#f6f8f9; --surface:#ffffff; --ink:#141e26; --ink-2:#4b5c68; --ink-3:#7e8d99;
+  --line:#dbe2e7; --line-2:#c4ced6; --accent:#0f7b8a; --accent-ink:#0a5a66;
+  --warm:#a8650a; --over:#c0392b; --due:#b9770e; --soon:#8a7a12; --photo-veil:rgba(246,248,249,.55);
+  color-scheme:light;
+}
+:root[data-theme="dark"]{
+  --bg:#000000; --surface:#0b0f12; --ink:#f2f4f5; --ink-2:#b3bdc4; --ink-3:#7b8891;
+  --line:#2a3238; --line-2:#3c4750; --accent:#48b0c0; --accent-ink:#7fcbd7;
+  --warm:#f5c400; --over:#e2564a; --due:#f0a93b; --soon:#e8c75a; --photo-veil:rgba(0,0,0,.42);
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  background:var(--bg); color:var(--ink); margin:0; overflow:hidden;
+  font-family:"Barlow","Helvetica Neue",Arial,sans-serif; font-variant-numeric:tabular-nums;
+}
+/* Everything is sized in em from this one figure, so the board fills any
+   screen shape: a 16:9 TV, or a browser window while testing. */
+.board{
+  font-size:min(1vw, 1.778vh); height:100vh; width:100vw; padding:1.2em 1.4em 1.1em;
+  display:grid; gap:1.1em 1.4em;
+  grid-template-columns:30fr 27fr 43fr;
+  grid-template-rows:auto 38fr 57fr;
+  grid-template-areas:"head head head" "clock now side" "fore fore side";
+}
+[hidden]{display:none !important}
+
+/* --- title, byline, toggle ------------------------------------------- */
+.page-head{grid-area:head; display:flex; align-items:center; gap:1em; min-height:0}
+.page-head h1{font-size:1.15em; font-weight:600; letter-spacing:.08em; text-transform:uppercase; margin:0; color:var(--ink-2)}
+.byline{font-size:.95em; color:var(--ink-3); font-style:italic; margin:0}
+.page-head .note{margin-left:auto; font-size:.95em; color:var(--due)}
+.theme-toggle{
+  flex:none; display:inline-grid; place-items:center;
+  width:2.2em; height:2.2em; border-radius:999px;
+  border:1px solid var(--line-2); background:var(--surface); color:var(--ink-2);
+  cursor:pointer; padding:0; line-height:1; font-size:1em;
+  transition:border-color .15s ease, color .15s ease, background .15s ease;
+}
+.theme-toggle:hover{border-color:var(--accent); color:var(--accent)}
+.theme-toggle:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+.theme-toggle .glyph{font-size:1.1em; line-height:1}
+
+/* --- clock ------------------------------------------------------------ */
+.clock{grid-area:clock; min-height:0; display:flex; flex-direction:column; justify-content:center}
+.clock .date{font-size:2.9em; font-weight:400; color:var(--ink-2); line-height:1.1}
+.clock .time{font-size:14.5em; font-weight:500; line-height:.95; letter-spacing:-.02em}
+
+/* --- current weather -------------------------------------------------- */
+.now{
+  grid-area:now; min-height:0; border:1px solid var(--line); border-radius:.5em;
+  padding:1em 1.3em; display:flex; flex-direction:column; justify-content:center;
+  align-items:flex-end; color:var(--warm); text-align:right;
+}
+.now .big{display:flex; align-items:center; gap:.25em; font-size:5.6em; font-weight:400; line-height:1}
+.now .big svg{width:1.05em; height:1.05em}
+.now .feels{font-size:1.75em; margin-top:.7em}
+.now .wind{font-size:1.5em; margin-top:.9em; padding-top:.8em; border-top:1px solid var(--line); width:100%}
+.now .where{font-size:1.1em; color:var(--ink-3); margin-top:.5em}
+.now .quiet{color:var(--ink-3); font-size:1.4em}
+
+/* --- forecast over the photo ------------------------------------------ */
+.fore{
+  grid-area:fore; min-height:0; position:relative; border-radius:.7em; overflow:hidden;
+  background:var(--surface); border:1px solid var(--line);
+}
+.fore .photo{position:absolute; inset:0; background-size:cover; background-position:center; transition:opacity 1.5s ease}
+.fore .veil{position:absolute; inset:0; background:var(--photo-veil)}
+.fore .days{position:relative; height:100%; display:grid; grid-auto-flow:column; grid-auto-columns:1fr; padding:1.2em .6em 1em}
+.fore .day{display:flex; flex-direction:column; align-items:center; justify-content:space-between; color:var(--warm); text-shadow:0 0 .35em var(--bg)}
+.fore .day .name{font-size:3.2em; font-weight:400; line-height:1}
+.fore .day svg{width:6.6em; height:6.6em; filter:drop-shadow(0 0 .3em var(--bg))}
+.fore .day .wet{font-size:2em; line-height:1.25; text-align:center}
+.fore .day .hilo{font-size:3.1em; font-weight:400; display:flex; gap:.55em; line-height:1}
+.fore .day .hilo .lo{opacity:.8}
+
+/* --- right column: agenda above, Next Up below ------------------------- */
+.side{grid-area:side; min-height:0; display:flex; flex-direction:column; gap:1em}
+.agenda{flex:1 1 0; min-height:0; overflow:hidden; position:relative}
+.agenda .dayhead{display:flex; align-items:baseline; gap:.5em; border-bottom:1px solid var(--line-2); padding-bottom:.15em; margin:.75em 0 .4em}
+.agenda .dayblock:first-child .dayhead{margin-top:0}
+.agenda .dayhead .num{font-size:2.5em; font-weight:300; line-height:1}
+.agenda .dayhead .lab{font-size:1.45em; color:var(--ink-2)}
+.agenda .ev{display:flex; gap:.7em; align-items:baseline; padding:.22em 0 .22em .6em; border-left:.22em solid var(--ink-3); margin:.3em 0}
+.agenda .ev .when{flex:none; width:5.2em; font-size:1.05em; color:var(--ink-2); text-transform:uppercase; letter-spacing:.02em}
+.agenda .ev .what{font-size:1.45em; line-height:1.25; min-width:0; overflow-wrap:anywhere}
+.agenda .ev.past{opacity:.45}
+.agenda .quiet{font-size:1.5em; color:var(--ink-3); padding:.6em 0}
+
+.nextup{flex:none; border-top:2px solid var(--line-2); padding-top:.6em}
+.nextup .hd{display:flex; align-items:baseline; gap:.7em; margin-bottom:.35em}
+.nextup h2{font-size:1.5em; font-weight:700; letter-spacing:.06em; text-transform:uppercase; margin:0}
+.nextup .n{font-size:1.05em; color:var(--ink-3); letter-spacing:.05em}
+.nextup .stale{font-size:1em; color:var(--due)}
+.nextup .row{display:flex; align-items:baseline; gap:.7em; padding:.28em 0 .28em .6em; border-left:.22em solid var(--ink-3); border-bottom:1px solid var(--line)}
+.nextup .row:last-child{border-bottom:0}
+.nextup .what{flex:1; min-width:0}
+.nextup .task{font-size:1.35em; font-weight:600}
+.nextup .item{font-size:.95em; color:var(--ink-3)}
+.nextup .when{font-size:1.25em; font-weight:600; white-space:nowrap; text-align:right}
+.nextup .when span{display:block; font-size:.7em; font-weight:400; color:var(--ink-3)}
+.nextup .over{border-left-color:var(--over)}   .nextup .over .when{color:var(--over)}
+.nextup .today{border-left-color:var(--due)}   .nextup .today .when{color:var(--due)}
+.nextup .soon{border-left-color:var(--soon)}   .nextup .soon .when{color:var(--soon)}
+.nextup .none{font-size:1.3em; color:var(--accent); padding:.3em 0}
+</style>
+</head>
+<body>
+<div class="board" id="board">
+
+  <header class="page-head" id="blk-head">
+    <h1>Kitchen Board</h1>
+    <p class="byline">by Ben Winchester, Rural Sociologist. November, 2026.</p>
+    <span class="note" id="note"></span>
+    <button type="button" class="theme-toggle" id="theme-toggle"
+            aria-label="Switch to dark mode" title="Switch color theme">
+      <span class="glyph" id="theme-glyph" aria-hidden="true">&#9790;</span>
+    </button>
+  </header>
+
+  <section class="clock" id="blk-clock">
+    <div class="date" id="date"></div>
+    <div class="time" id="time"></div>
+  </section>
+
+  <section class="now" id="blk-now"><div class="quiet">Weather loading</div></section>
+
+  <section class="fore" id="blk-fore">
+    <div class="photo" id="photo"></div>
+    <div class="veil"></div>
+    <div class="days" id="days"></div>
+  </section>
+
+  <aside class="side">
+    <section class="agenda" id="blk-agenda"><div class="quiet">Calendar loading</div></section>
+    <section class="nextup" id="blk-nextup"></section>
+  </aside>
+</div>
+
+<script>
+/* The canonical toggle. Light is the default; nothing reads the OS setting. */
+(function(){
+  var KEY = 'bw-theme-kitchenboard';
+  var SUN = '☀', MOON = '☾';
+  var root = document.documentElement,
+      btn = document.getElementById('theme-toggle'),
+      glyph = document.getElementById('theme-glyph');
+
+  function current(){ return root.getAttribute('data-theme') || 'light'; }
+  function paint(){
+    var dark = current() === 'dark';
+    glyph.textContent = dark ? SUN : MOON;
+    btn.setAttribute('aria-label', dark ? 'Switch to light mode' : 'Switch to dark mode');
+  }
+  try{
+    var saved = localStorage.getItem(KEY);
+    /* A TV has no easy way to press the toggle, so the address it opens may
+       carry theme=dark. A choice made with the toggle still wins over it. */
+    var asked = (/[#&]theme=(dark|light)\b/.exec(location.hash) || [])[1];
+    if(saved === 'dark' || saved === 'light') root.setAttribute('data-theme', saved);
+    else if(asked) root.setAttribute('data-theme', asked);
+  }catch(e){}
+  paint();
+  btn.addEventListener('click', function(){
+    var next = current() === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    try{ localStorage.setItem(KEY, next); }catch(e){}
+    paint();
+  });
+})();
+</script>
+
+<script>
+(function(){
+  "use strict";
+  var $ = function(id){ return document.getElementById(id); };
+  var MIN = 60000, HOUR = 3600000;
+  var CONFIG = { blocks:{}, photos:[], photoSeconds:90, nextUpFeed:"", nextUpDays:14, dataUrl:"" };
+  var hash = {};
+  location.hash.replace(/^#/, "").split("&").forEach(function(p){
+    var i = p.indexOf("="); if(i > 0) hash[p.slice(0, i)] = decodeURIComponent(p.slice(i + 1));
+  });
+
+  function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+  function midnight(d){ d = d ? new Date(d) : new Date(); d.setHours(0,0,0,0); return d; }
+  function parseDay(s){ var p = String(s).split("-"); return new Date(+p[0], +p[1] - 1, +p[2]); }
+  function isoDay(d){ return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2); }
+  function getJSON(url){
+    return fetch(url + (url.indexOf("?") < 0 ? "?" : "&") + "t=" + Date.now(), {cache:"no-store"})
+      .then(function(r){ if(!r.ok) throw new Error(r.status); return r.json(); });
+  }
+  var notes = {};
+  function note(key, text){
+    if(text) notes[key] = text; else delete notes[key];
+    $("note").textContent = Object.keys(notes).map(function(k){ return notes[k]; }).join("  ·  ");
+  }
+
+  /* ---------------------------------------------------------- clock ---- */
+  var DAYS = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+  var MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  var lastDay = "";
+  function tick(){
+    var d = new Date(), h = d.getHours() % 12 || 12;
+    $("time").textContent = h + ":" + ("0" + d.getMinutes()).slice(-2);
+    $("date").textContent = DAYS[d.getDay()] + ", " + MON[d.getMonth()] + " " + d.getDate();
+    var today = isoDay(d);
+    if(lastDay && today !== lastDay){ drawAgenda(); drawNextUp(); }   /* midnight rolled over */
+    lastDay = today;
+  }
+
+  /* -------------------------------------------------------- weather ---- */
+  /* Drawn here, not downloaded, so the board has no icon set to go missing. */
+  function icon(code, night){
+    var sun = '<circle cx="24" cy="24" r="9" fill="currentColor"/><g stroke="currentColor" stroke-width="3" stroke-linecap="round">' +
+      '<path d="M24 5v6M24 37v6M5 24h6M37 24h6M10.6 10.6l4.2 4.2M33.2 33.2l4.2 4.2M10.6 37.4l4.2-4.2M33.2 14.8l4.2-4.2"/></g>';
+    var moon = '<path d="M30 8a16 16 0 1 0 10 28A18 18 0 0 1 30 8z" fill="currentColor"/>';
+    var cloud = function(y){ return '<path transform="translate(0 ' + y + ')" d="M14 34a8 8 0 0 1 .9-15.9A11 11 0 0 1 36 20.5 7 7 0 0 1 35 34z" fill="currentColor"/>'; };
+    var smallSun = '<g transform="translate(-6 -8) scale(.62)" opacity=".95">' + (night ? moon : sun) + '</g>';
+    var drops = '<g stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M17 38l-2 6M25 38l-2 6M33 38l-2 6"/></g>';
+    var flakes = '<g fill="currentColor"><circle cx="16" cy="41" r="2.2"/><circle cx="24" cy="44" r="2.2"/><circle cx="32" cy="41" r="2.2"/></g>';
+    var bolt = '<path d="M25 34l-6 8h5l-2 6 7-9h-5z" fill="currentColor"/>';
+    var fog = '<g stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M9 36h30M13 42h22"/></g>';
+    var body;
+    if(code === 0) body = night ? moon : sun;
+    else if(code <= 2) body = smallSun + cloud(2);
+    else if(code === 3) body = cloud(0);
+    else if(code <= 48) body = cloud(-6) + fog;
+    else if(code <= 67 || (code >= 80 && code <= 82)) body = cloud(-6) + drops;
+    else if(code <= 77 || code === 85 || code === 86) body = cloud(-6) + flakes;
+    else body = cloud(-6) + bolt;
+    return '<svg viewBox="0 0 48 48" aria-hidden="true">' + body + '</svg>';
+  }
+  var COMPASS = ["N","NE","E","SE","S","SW","W","NW"];
+  var place = null;
+  function loadWeather(){
+    if(!place || place.lat == null) return;
+    var u = "https://api.open-meteo.com/v1/forecast?latitude=" + place.lat + "&longitude=" + place.lon +
+      "&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,is_day" +
+      "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum" +
+      "&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch&timezone=auto&forecast_days=5";
+    getJSON(u).then(function(w){
+      var c = w.current, d = w.daily;
+      $("blk-now").innerHTML =
+        '<div class="big">' + Math.round(c.temperature_2m) + '°' + icon(c.weather_code, !c.is_day) + '</div>' +
+        '<div class="feels">Feels like ' + Math.round(c.apparent_temperature) + '</div>' +
+        '<div class="wind">' + Math.round(c.wind_speed_10m) + ' mph ' +
+          COMPASS[Math.round(c.wind_direction_10m / 45) % 8] + ' wind</div>' +
+        (place.name ? '<div class="where">' + esc(place.name) + '</div>' : '');
+      var out = "";
+      for(var i = 0; i < 4 && i < d.time.length; i++){
+        var day = parseDay(d.time[i]);
+        var amt = d.precipitation_sum[i] || 0, pct = d.precipitation_probability_max[i];
+        out += '<div class="day">' +
+          '<div class="name">' + (i === 0 ? "Today" : DAYS[day.getDay()].slice(0, 3)) + '</div>' +
+          icon(d.weather_code[i], false) +
+          '<div class="wet">' + (pct == null ? "" : pct + "%") + '<br>' +
+            (amt >= 0.005 ? amt.toFixed(2) + '″' : "0″") + '</div>' +
+          '<div class="hilo"><span>' + Math.round(d.temperature_2m_max[i]) + '</span>' +
+            '<span class="lo">' + Math.round(d.temperature_2m_min[i]) + '</span></div></div>';
+      }
+      $("days").innerHTML = out;
+      note("weather", "");
+    }).catch(function(){
+      /* Leave the last reading up; say so only if there has never been one. */
+      if(!$("days").innerHTML) $("blk-now").innerHTML = '<div class="quiet">Weather unavailable</div>';
+    });
+  }
+
+  /* ------------------------------------------------------- calendar ---- */
+  /* The data file in the public repository is encrypted. The key is the k=
+     part of the address this page was opened with; it is never sent anywhere. */
+  var cal = null;
+  function b64(s){
+    s = s.replace(/-/g, "+").replace(/_/g, "/"); while(s.length % 4) s += "=";
+    var bin = atob(s), out = new Uint8Array(bin.length);
+    for(var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+  function unlock(text){
+    var raw = b64(text.trim());
+    return crypto.subtle.importKey("raw", b64(hash.k), "AES-GCM", false, ["decrypt"])
+      .then(function(key){ return crypto.subtle.decrypt({name:"AES-GCM", iv:raw.slice(0, 12)}, key, raw.slice(12)); })
+      .then(function(buf){ return JSON.parse(new TextDecoder().decode(buf)); });
+  }
+  function dataUrl(){
+    if(CONFIG.dataUrl) return CONFIG.dataUrl;
+    var m = /^([^.]+)\.github\.io$/.exec(location.hostname), repo = location.pathname.split("/")[1];
+    if(m && repo) return "https://raw.githubusercontent.com/" + m[1] + "/" + repo + "/data/calendar.enc";
+    return "calendar.enc";                       /* running locally, for testing */
+  }
+  function useCalendar(data){
+    cal = data;
+    var moved = !place || place.lat !== data.lat || place.lon !== data.lon;
+    place = {lat:data.lat, lon:data.lon, name:data.place};
+    drawAgenda();
+    if(moved) loadWeather();
+  }
+  function loadCalendar(){
+    if(!hash.k || !window.crypto || !crypto.subtle){
+      $("blk-agenda").innerHTML = '<div class="quiet">' + (hash.k ? "This browser cannot unlock the calendar."
+        : "The calendar key is missing from this page’s address.") + '</div>';
+      /* The location travels inside the locked file, so no key, no weather. */
+      $("blk-now").innerHTML = '<div class="quiet">Weather needs the calendar key too</div>';
+      return;
+    }
+    var u = dataUrl();
+    fetch(u + "?t=" + Date.now(), {cache:"no-store"})
+      .then(function(r){ if(!r.ok) throw new Error(r.status); return r.text(); })
+      .then(function(text){
+        return unlock(text).then(function(data){
+          try{ localStorage.setItem("kb-calendar", text); }catch(e){}
+          useCalendar(data);
+        });
+      })
+      .catch(function(){
+        if(cal) return;                          /* keep what is on screen */
+        var kept = null; try{ kept = localStorage.getItem("kb-calendar"); }catch(e){}
+        if(kept) unlock(kept).then(useCalendar).catch(function(){ noCalendar(); });
+        else noCalendar();
+      });
+  }
+  function noCalendar(){ $("blk-agenda").innerHTML = '<div class="quiet">Calendar unavailable</div>'; }
+
+  function clock12(hm){
+    var p = hm.split(":"), h = +p[0];
+    return (h % 12 || 12) + ":" + p[1] + (h < 12 ? " AM" : " PM");
+  }
+  function drawAgenda(){
+    if(!cal) return;
+    var box = $("blk-agenda"), now = new Date(), today = isoDay(now), tomorrow = isoDay(new Date(midnight().getTime() + 26 * HOUR));
+    var nowHM = ("0" + now.getHours()).slice(-2) + ":" + ("0" + now.getMinutes()).slice(-2);
+    var byDay = {}, order = [];
+    cal.events.forEach(function(e){
+      if(e.d < today) return;
+      if(!byDay[e.d]){ byDay[e.d] = []; order.push(e.d); }
+      byDay[e.d].push(e);
+    });
+    box.innerHTML = "";
+    if(!order.length){ box.innerHTML = '<div class="quiet">Nothing on the calendar.</div>'; }
+    /* Add whole days until one would run off the bottom, then stop: a day
+       cut in half reads as if its later events did not exist. */
+    for(var i = 0; i < order.length; i++){
+      var d = order[i], date = parseDay(d);
+      var label = d === today ? "Today" : d === tomorrow ? "Tomorrow" : DAYS[date.getDay()];
+      var html = '<div class="dayhead"><span class="num">' + ("0" + date.getDate()).slice(-2) +
+                 '</span><span class="lab">' + label + '</span></div>';
+      byDay[d].forEach(function(e){
+        var color = (cal.calendars[e.c] || {}).color || "";
+        var past = d === today && e.t && (e.e || e.t) < nowHM;
+        html += '<div class="ev' + (past ? " past" : "") + '" style="border-left-color:' + esc(color) + '">' +
+                '<span class="when">' + (e.t ? clock12(e.t) : "All day") + '</span>' +
+                '<span class="what">' + esc(e.s) + '</span></div>';
+      });
+      var block = document.createElement("div");
+      block.className = "dayblock"; block.innerHTML = html;
+      box.appendChild(block);
+      if(box.scrollHeight > box.clientHeight + 1 && i > 0){ box.removeChild(block); break; }
+    }
+    var age = (Date.now() - new Date(cal.generated).getTime()) / HOUR;
+    var failed = (cal.failed || []).map(function(i){ return (cal.calendars[i] || {}).name; }).filter(Boolean);
+    note("calendar", age > 36 ? "calendar last updated " + MON[new Date(cal.generated).getMonth()] + " " + new Date(cal.generated).getDate()
+       : failed.length ? "could not refresh: " + failed.join(", ") : "");
+  }
+
+  /* -------------------------------------------------------- Next Up ---- */
+  var chores = null;
+  function loadNextUp(){
+    if(!CONFIG.nextUpFeed) return;
+    getJSON(CONFIG.nextUpFeed).then(function(j){
+      if(j && j.tasks && j.tasks.length){ chores = j; drawNextUp(); }
+    }).catch(function(){});
+  }
+  function drawNextUp(){
+    if(!chores) return;
+    var now = midnight(), horizon = CONFIG.nextUpDays, out = "", n = 0;
+    chores.tasks.forEach(function(r){
+      if(!r || !r.d) return;
+      if(r.s && parseDay(r.s) > now) return;                 /* postponed: stay quiet */
+      var days = Math.round((parseDay(r.d) - now) / 86400000);
+      if(days > horizon) return;
+      n++;
+      var cls = days < 0 ? "over" : (days === 0 ? "today" : "soon");
+      var when = days < 0 ? (-days) + (days === -1 ? " day over" : " days over")
+               : days === 0 ? "today" : days + (days === 1 ? " day" : " days");
+      var d = parseDay(r.d);
+      out += '<div class="row ' + cls + '"><div class="what"><div class="task">' + esc(r.t) +
+             '</div><div class="item">' + esc(r.i) + '</div></div><div class="when">' + when +
+             '<span>' + MON[d.getMonth()] + " " + d.getDate() + '</span></div></div>';
+    });
+    if(!n) out = '<div class="none">Nothing due in the next ' + horizon + ' days.</div>';
+    var age = Math.round((now - parseDay(chores.generated)) / 86400000);
+    $("blk-nextup").innerHTML = '<div class="hd"><h2>Next Up</h2><span class="n">' +
+      (n ? n + (n === 1 ? " job" : " jobs") + " · next " + horizon + " days" : "all clear") + '</span>' +
+      (age > horizon ? '<span class="stale">list is ' + age + ' days old</span>' : "") + '</div>' + out;
+    drawAgenda();                                 /* its room just changed */
+  }
+
+  /* --------------------------------------------------------- photos ---- */
+  var shot = 0;
+  function nextPhoto(){
+    if(!CONFIG.photos.length) return;
+    var src = "photos/" + CONFIG.photos[shot++ % CONFIG.photos.length];
+    var img = new Image();
+    img.onload = function(){ $("photo").style.backgroundImage = 'url("' + src + '")'; };
+    img.src = src;
+  }
+
+  /* ---------------------------------------------------------- start ---- */
+  function applyBlocks(){
+    ["head","clock","now","fore","agenda","nextup"].forEach(function(k){
+      if(CONFIG.blocks[k] === false) $("blk-" + k).hidden = true;
+    });
+  }
+  function start(){
+    applyBlocks();
+    tick(); setInterval(tick, 1000);
+    loadCalendar(); setInterval(loadCalendar, 10 * MIN);
+    setInterval(drawAgenda, 5 * MIN);            /* dim what has finished */
+    loadWeather(); setInterval(loadWeather, 15 * MIN);
+    loadNextUp(); setInterval(loadNextUp, HOUR);
+    nextPhoto(); if(CONFIG.photos.length > 1) setInterval(nextPhoto, CONFIG.photoSeconds * 1000);
+    window.addEventListener("resize", drawAgenda);
+  }
+  getJSON("config.json").then(function(c){
+    Object.keys(c).forEach(function(k){ CONFIG[k] = c[k]; });
+  }).catch(function(){}).then(start);
+
+  /* The TV never reloads on its own, so check hourly whether this page has
+     changed and reload only then. If the check fails (no internet), do
+     nothing: a reload at that moment would replace the board with an error. */
+  var mine = null;
+  function checkForNewPage(){
+    fetch(location.pathname + "?t=" + Date.now(), {cache:"no-store"})
+      .then(function(r){ if(!r.ok) throw 0; return r.text(); })
+      .then(function(t){ if(mine === null) mine = t; else if(t !== mine) location.reload(); })
+      .catch(function(){});
+  }
+  checkForNewPage(); setInterval(checkForNewPage, HOUR);
+})();
+</script>
+</body>
+</html>
