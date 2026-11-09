@@ -24,24 +24,6 @@
       "background": "#000000",
       "modules": [
         {
-          "id": "m1",
-          "type": "photos",
-          "name": "Photos",
-          "x": 1,
-          "y": 41,
-          "w": 55,
-          "h": 57,
-          "font": 1,
-          "hidden": false,
-          "opts": {
-            "source": "album",
-            "seconds": 5,
-            "fit": "cover",
-            "dim": 35,
-            "round": true
-          }
-        },
-        {
           "id": "m2",
           "type": "forecast",
           "name": "Forecast",
@@ -49,7 +31,7 @@
           "y": 41,
           "w": 55,
           "h": 57,
-          "font": 1,
+          "font": 1.25,
           "hidden": false,
           "opts": {
             "days": 4,
@@ -79,11 +61,11 @@
           "id": "m4",
           "type": "weather",
           "name": "Weather now",
-          "x": 31.5,
-          "y": 2,
+          "x": 31,
+          "y": 3,
           "w": 24.5,
           "h": 36,
-          "font": 1,
+          "font": 1.2,
           "hidden": false,
           "opts": {
             "feels": true,
@@ -118,6 +100,24 @@
           "hidden": false,
           "opts": {
             "days": 14
+          }
+        },
+        {
+          "id": "m1",
+          "type": "photos",
+          "name": "Photos",
+          "x": 1,
+          "y": 41,
+          "w": 55,
+          "h": 57,
+          "font": 1,
+          "hidden": false,
+          "opts": {
+            "source": "album",
+            "seconds": 5,
+            "fit": "cover",
+            "dim": 35,
+            "round": true
           }
         }
       ]
