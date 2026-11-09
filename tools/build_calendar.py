@@ -1,4 +1,4 @@
-"""Fetch the family calendars and write The Daily's encrypted data file.
+"""Fetch the family calendars and write the encrypted data file for Glance Digital Wall Calendar.
 
 Run by the scheduled GitHub job (.github/workflows/calendar.yml). It reads two
 secrets from the environment:
@@ -57,7 +57,7 @@ def fetch(addr):
     if "://" not in addr:                       # local file, for testing
         with open(addr, "rb") as f:
             return f.read()
-    req = urllib.request.Request(addr, headers={"User-Agent": "thedaily"})
+    req = urllib.request.Request(addr, headers={"User-Agent": "glance"})
     with urllib.request.urlopen(req, timeout=40) as r:
         return r.read()
 

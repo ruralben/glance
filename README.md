@@ -1,4 +1,4 @@
-# The Daily
+# Glance Digital Wall Calendar
 
 The display on the kitchen TV: clock, weather, the family calendar and the
 Chore Factory "Next Up" list, on one page.

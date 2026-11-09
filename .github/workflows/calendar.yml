@@ -1,4 +1,4 @@
-# Refreshes The Daily's calendar data.
+# Refreshes the calendar data for Glance Digital Wall Calendar.
 # Fetches the family calendars, trims them to what the TV shows, encrypts the
 # result and commits it to the "data" branch. Nothing readable is published:
 # this repository is public, and so is this job's log.
@@ -55,6 +55,6 @@ jobs:
             echo "nothing to publish"
             exit 0
           fi
-          git -c user.name="thedaily" -c user.email="thedaily@users.noreply.github.com" \
+          git -c user.name="glance" -c user.email="glance@users.noreply.github.com" \
               commit --quiet -m "Calendar data"
           git push --quiet origin data
