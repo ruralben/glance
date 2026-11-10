@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <title>Glance Digital Wall Calendar</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon.ico" sizes="48x48">
+<link rel="apple-touch-icon" href="favicon-180.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -117,6 +120,7 @@ body{
 .m-sensors .sym b{font-size:1.25em; font-weight:600; line-height:1.15; margin-top:.25em; color:var(--ink)}
 .m-sensors .sym small{font-size:.9em; color:var(--ink-3); margin-top:.15em}
 .m-sensors .sym.bad{color:var(--over)}  .m-sensors .sym.warn{color:var(--due)}
+.m-sensors.tinted .sym.bad, .m-sensors.tinted .sym.warn{color:var(--ink)}   /* the module's own color, when it has one */
 .m-sensors .symnote{font-size:1em; color:var(--due); text-align:center; margin-top:.5em}
 
 /* --- photos ------------------------------------------------------------- */
@@ -213,6 +217,21 @@ body{
     }
     size(lo);
   }
+  /* A module's own color, chosen in the Manager: its text and its icons (the
+     weather symbols, the door and the drop) take it, and the quieter lines take
+     softer shades of it. Colors that carry meaning stay as they are: overdue,
+     wet, open, battery level, each calendar's stripe and the cold blue. */
+  var CAN_MIX = !!(window.CSS && CSS.supports && CSS.supports("color", "color-mix(in srgb, red 50%, transparent)"));
+  function paint(el, color){
+    if(!/^#[0-9a-f]{6}$/i.test(color || "")) return;
+    el.classList.add("tinted");
+    el.style.color = color;
+    ["--ink", "--warm", "--accent"].forEach(function(v){ el.style.setProperty(v, color); });
+    if(CAN_MIX){
+      el.style.setProperty("--ink-2", "color-mix(in srgb, " + color + " 78%, transparent)");
+      el.style.setProperty("--ink-3", "color-mix(in srgb, " + color + " 56%, transparent)");
+    }
+  }
   var notes = {};
   function note(key, text){
     if(text) notes[key] = text; else delete notes[key];
@@ -274,19 +293,21 @@ body{
   /* The colder, the bluer: the usual warm color down to 50 degrees, fading to
      an icy white at freezing and a strong blue by zero. */
   var COLD = [[50, [245,196,0]], [32, [214,232,255]], [0, [74,168,255]]];
-  function coldColor(t){
+  function coldColor(t, from){
     if(t == null || isNaN(t) || t >= COLD[0][0]) return "";
     for(var i = 1; i < COLD.length; i++){
       if(t >= COLD[i][0] || i === COLD.length - 1){
         var a = COLD[i - 1], b = COLD[i], k = Math.max(0, Math.min(1, (a[0] - t) / (a[0] - b[0])));
-        return ' style="color:rgb(' + [0,1,2].map(function(c){ return Math.round(a[1][c] + (b[1][c] - a[1][c]) * k); }).join(",") + ')"';
+        var start = i === 1 && from ? from : a[1];      /* fade from the module's own color, if it has one */
+        return ' style="color:rgb(' + [0,1,2].map(function(c){ return Math.round(start[c] + (b[1][c] - start[c]) * k); }).join(",") + ')"';
       }
     }
     return "";
   }
   KINDS.forecast = { draw:function(el, m){
     var w = DATA.wx; if(!w){ el.innerHTML = ""; return; }
-    var tint = opt(m, "coldBlue", true) ? coldColor : function(){ return ""; };
+    var own = /^#[0-9a-f]{6}$/i.test(m.color || "") ? [1, 3, 5].map(function(i){ return parseInt(m.color.substr(i, 2), 16); }) : null;
+    var tint = opt(m, "coldBlue", true) ? function(t){ return coldColor(t, own); } : function(){ return ""; };
     var n = Math.max(1, Math.min(6, +opt(m, "days", 4) || 4)), out = "";
     for(var i = 0; i < n && i < w.days.length; i++){
       var d = w.days[i], day = parseDay(d.date);
@@ -732,6 +753,7 @@ body{
         el.style.setProperty("--f", String(+m.font || 1));
         el.style.opacity = String(Math.max(0, Math.min(100, m.opacity == null ? 100 : +m.opacity)) / 100);
         if(m.fontFamily) el.style.fontFamily = family(m.fontFamily);
+        paint(el, m.color);
         box.appendChild(el);
         var rec = {mod:m, el:el, screen:sc.id}, k = KINDS[m.type];
         if(k.mount) k.mount(el, m, rec);
