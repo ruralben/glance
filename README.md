@@ -1,42 +1,45 @@
 # Glance Digital Wall Calendar
 
-The display on the kitchen TV: clock, weather, the family calendar and the
-Chore Factory "Next Up" list, on one page.
+The display on the kitchen wall: clock, weather, the family calendar, photos,
+scores and the Chore Factory "Next Up" list, laid out however the household
+likes.
 
 ## How it works
 
 | | |
 |---|---|
 | `index.html` | the display page, served by GitHub Pages |
-| `config.json` | the layout: screens, the modules on each, devices, weather source |
+| `layout.enc` | the layout (screens, the modules on each, devices), encrypted |
 | `photos/` | picture files for the Photos module (these are public, like everything here) |
-| `tools/build_calendar.py` | fetches the calendars and the photo album's picture list, and writes the encrypted data file |
+| `tools/build_calendar.py` | fetches the calendars and the photo albums' picture lists, and writes the encrypted data file |
 | `.github/workflows/calendar.yml` | runs that every half hour |
 | branch `data` | holds `calendar.enc`, the encrypted data file, and nothing else |
 
-This repository is public, so nothing private is stored in it as readable
-text. The calendar addresses, the home location and the photo album link are
-repository secrets. Calendar events, the location and the album's picture
-addresses are published only inside `calendar.enc`, which is encrypted; the
-key is in the address each display opens (after the `#`, a part of an address
-that browsers never send to a server) and in the repository's secrets.
+This repository is public, so nothing about the household is stored in it as
+readable text. The layout, including any text and web addresses typed into
+modules, is published only as `layout.enc`. Calendar events, the home
+location and the albums' picture addresses are published only inside
+`calendar.enc`. Both are encrypted; the key is in the address each display
+opens (after the `#`, a part of an address that browsers never send to a
+server) and in the repository's secrets. The calendar addresses, location and
+album links themselves are repository secrets.
 
 Weather comes from Open-Meteo or the US National Weather Service, whichever
-the layout names. The chore list comes from the Chore Factory feed.
+the layout names. Scores come from ESPN's public schedule feed. The chore
+list comes from the Chore Factory feed.
 
 ## Screens, modules and devices
 
 A layout has up to four screens. A screen holds modules (date and time,
-weather, forecast, calendar, Next Up, photos, text, countdown), each placed by
-percentages of the screen so one layout fits any resolution. A device is one
-display; it shows the screens assigned to it and rotates through them if there
-is more than one. A display chooses its device with `&device=<id>` in its
-address.
+weather, forecast, calendar, Next Up, photos, sports, radar or web picture,
+countdown, text), each placed by percentages of the screen so one layout fits
+any resolution. A device is one display; it shows the screens assigned to it
+and rotates through them if there is more than one. A display chooses its
+device with `&device=<id>` in its address.
 
 ## Changing things
 
 Everything is edited in the Glance canvas, a local editor on the home PC
-(started from the Server Hub; it is not part of this repository). It writes
-`config.json` and the private settings, and its Publish button sends them
-here. Displays check every ten minutes and apply a changed layout by
-themselves.
+(started from the Server Hub; it is not part of this repository). Its Publish
+button encrypts the layout and sends it here. Displays check every ten
+minutes and apply a changed layout by themselves.

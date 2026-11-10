@@ -33,7 +33,7 @@ REFRESH_HOURS = 20       # rewrite at least this often, so the board can tell
 
 def parse_settings(text):
     out = {"lat": None, "lon": None, "place": "", "tz": "America/Chicago", "calendars": [],
-           "album": ""}
+           "albums": []}
     for raw in text.splitlines():
         line = raw.strip()
         if not line or line.startswith("#") or "=" not in line:
@@ -47,12 +47,15 @@ def parse_settings(text):
         elif key == "timezone" and val:
             out["tz"] = val
         elif key == "photos" and val:
-            out["album"] = val
+            out["albums"].append(val)            # one line per album
         elif key == "calendar":
-            parts = [p.strip() for p in val.split("|", 2)]
-            if len(parts) == 3 and parts[2]:
+            # name | color | address | tag. The tag is a short random label the
+            # layout uses to say which calendars a module shows; it gives
+            # away nothing about the calendar.
+            parts = [p.strip() for p in val.split("|")]
+            if len(parts) >= 3 and parts[2]:
                 out["calendars"].append({"name": parts[0], "color": parts[1] or "#888888",
-                                         "url": parts[2]})
+                                         "url": parts[2], "id": parts[3] if len(parts) > 3 else ""})
     return out
 
 
@@ -65,7 +68,9 @@ def fetch(addr):
         return r.read()
 
 
-MAX_PHOTOS = 300
+MAX_PHOTOS = 1000        # across all albums together. Google's share page lists
+                         # only about the first 300 pictures of any one album,
+                         # so more than that takes more than one album.
 _PHOTO = re.compile(r'\["(https://lh3\.googleusercontent\.com/[^"\\]+)",(\d+),(\d+)')
 
 
@@ -96,7 +101,20 @@ def album_photos(link):
         out.append(url)
     if not out:
         raise ValueError("no pictures found on the album page")
-    return out[:MAX_PHOTOS]
+    return out
+
+
+def pool(lists, limit):
+    """One list from several albums: take turns between them so that every
+    album is represented if the total has to be cut off, and drop repeats."""
+    seen, out, i = set(), [], 0
+    while len(out) < limit and any(i < len(l) for l in lists):
+        for l in lists:
+            if i < len(l) and l[i] not in seen and len(out) < limit:
+                seen.add(l[i])
+                out.append(l[i])
+        i += 1
+    return out
 
 
 def events_from(ics_bytes, cal_index, tz, first, last):
@@ -191,20 +209,26 @@ def main():
     events.sort(key=lambda r: (r["d"], r["t"] != "", r["t"], r["s"].lower()))
 
     photos, photos_failed = [], False
-    if settings["album"]:
-        try:
-            photos = album_photos(settings["album"])
-            print("photo album: %d picture(s)" % len(photos))
-        except Exception as ex:
-            photos_failed = True
-            photos = (old or {}).get("photos", [])
-            print("photo album: FAILED (%s); keeping the last %d" % (type(ex).__name__, len(photos)))
+    if settings["albums"]:
+        got = []
+        for n, link in enumerate(settings["albums"], 1):
+            try:
+                got.append(album_photos(link))
+                print("photo album %d: %d picture(s)" % (n, len(got[-1])))
+            except Exception as ex:
+                photos_failed = True
+                print("photo album %d: FAILED (%s)" % (n, type(ex).__name__))
+        photos = pool(got, MAX_PHOTOS)
+        if photos_failed and old and len(old.get("photos", [])) > len(photos):
+            # Better last time's fuller list than a thinner one from a bad run.
+            photos = old["photos"]
+        print("photos: %d in the list" % len(photos))
 
     body = {
         "photos": photos, "photosFailed": photos_failed,
         "tz": settings["tz"], "lat": settings["lat"], "lon": settings["lon"],
         "place": settings["place"], "from": first.isoformat(), "to": last.isoformat(),
-        "calendars": [{"name": c["name"], "color": c["color"]} for c in settings["calendars"]],
+        "calendars": [{"name": c["name"], "color": c["color"], "id": c["id"]} for c in settings["calendars"]],
         "events": events, "failed": failed,
     }
 

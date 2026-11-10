@@ -57,8 +57,8 @@ body{
 .m-forecast .day .name{font-size:3.2em; font-weight:400; line-height:1}
 .m-forecast .day svg{width:6.6em; height:6.6em; filter:drop-shadow(0 0 .3em #000)}
 .m-forecast .day .wet{font-size:2em; line-height:1.25; text-align:center}
-.m-forecast .day .hilo{font-size:3.1em; font-weight:400; display:flex; gap:.55em; line-height:1}
-.m-forecast .day .hilo .lo{opacity:.8}
+.m-forecast .day .hilo{font-size:3.1em; font-weight:400; display:flex; gap:.5em; line-height:1; align-items:baseline}
+.m-forecast .day .hilo .lo{font-size:.8em; opacity:.9}
 
 /* --- calendar ----------------------------------------------------------- */
 .m-calendar .dayhead{display:flex; align-items:baseline; gap:.5em; border-bottom:1px solid var(--line-2); padding-bottom:.15em; margin:.75em 0 .4em}
@@ -96,10 +96,31 @@ body{
 
 /* --- text and countdown ------------------------------------------------- */
 .m-text{display:flex; flex-direction:column; justify-content:center; font-size:calc(var(--u, 10px) * var(--f, 1) * 2.4); line-height:1.25; white-space:pre-wrap}
-.m-countdown{display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center}
-.m-countdown .num{font-size:9em; font-weight:500; line-height:1; color:var(--warm)}
-.m-countdown .unit{font-size:2em; color:var(--ink-2)}
-.m-countdown .label{font-size:2.2em; margin-top:.3em}
+.m-countdown{display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding:.6em}
+.m-countdown.tile{border-radius:.6em; background:var(--tile, #a61e2a); color:#fff}
+.m-countdown .label{font-size:2.2em; font-weight:500; line-height:1.15; margin-bottom:.35em}
+.m-countdown .well{border-radius:.4em; min-width:55%}
+.m-countdown.tile .well{background:rgba(0,0,0,.22); padding:.5em 1.4em .6em}
+.m-countdown .num{font-size:7.5em; font-weight:500; line-height:1}
+.m-countdown:not(.tile) .num{color:var(--warm)}
+.m-countdown .unit{font-size:1.5em; letter-spacing:.12em; text-transform:uppercase; opacity:.8; margin-top:.2em}
+
+/* --- sports ------------------------------------------------------------- */
+.m-sports .team{display:grid; grid-template-columns:2.6em 1fr auto; column-gap:.7em; align-items:center; padding:.4em 0; border-bottom:1px solid var(--line)}
+.m-sports .team:last-child{border-bottom:0}
+.m-sports .logo{width:2.6em; height:2.6em; object-fit:contain; grid-row:1 / span 2}
+.m-sports .nm{font-size:1.45em; font-weight:600; line-height:1.15}
+.m-sports .nm small{font-size:.7em; font-weight:400; color:var(--ink-3); margin-left:.4em}
+.m-sports .last{font-size:1.1em; color:var(--ink-2); grid-column:2}
+.m-sports .last b.W{color:#58c27d} .m-sports .last b.L{color:var(--over)}
+.m-sports .next{grid-column:3; grid-row:1 / span 2; text-align:right; font-size:1.25em; font-weight:600; line-height:1.2}
+.m-sports .next small{display:block; font-size:.75em; font-weight:400; color:var(--ink-3)}
+.m-sports .next.live{color:var(--warm)}
+
+/* --- radar or any picture from a web address ---------------------------- */
+.m-radar.round{border-radius:.7em}
+.m-radar img{width:100%; height:100%; display:block}
+.m-radar .quiet{position:absolute; left:1em; top:1em}
 </style>
 </head>
 <body>
@@ -118,8 +139,9 @@ body{
   var PREVIEW = "preview" in hash;              /* shown inside the Glance canvas */
 
   var CONFIG = null, device = null, shown = "", turn = 0, rotor = null;
-  var DATA = { cal:null, wx:null, chores:null };  /* what the modules draw from */
+  var DATA = { cal:null, wx:null, chores:null, sports:{} };  /* what the modules draw from */
   var mods = [];                                 /* {mod, el, screen, tick} currently mounted */
+  var TAGS = null;                               /* canvas preview only: calendar name -> tag */
 
   function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
   function midnight(d){ d = d ? new Date(d) : new Date(); d.setHours(0,0,0,0); return d; }
@@ -189,8 +211,22 @@ body{
       (opt(m, "place", true) && w.place ? '<div class="where">' + esc(w.place) + '</div>' : "");
   }};
 
+  /* The colder, the bluer: the usual warm color down to 50 degrees, fading to
+     an icy white at freezing and a strong blue by zero. */
+  var COLD = [[50, [245,196,0]], [32, [214,232,255]], [0, [74,168,255]]];
+  function coldColor(t){
+    if(t == null || isNaN(t) || t >= COLD[0][0]) return "";
+    for(var i = 1; i < COLD.length; i++){
+      if(t >= COLD[i][0] || i === COLD.length - 1){
+        var a = COLD[i - 1], b = COLD[i], k = Math.max(0, Math.min(1, (a[0] - t) / (a[0] - b[0])));
+        return ' style="color:rgb(' + [0,1,2].map(function(c){ return Math.round(a[1][c] + (b[1][c] - a[1][c]) * k); }).join(",") + ')"';
+      }
+    }
+    return "";
+  }
   KINDS.forecast = { draw:function(el, m){
     var w = DATA.wx; if(!w){ el.innerHTML = ""; return; }
+    var tint = opt(m, "coldBlue", true) ? coldColor : function(){ return ""; };
     var n = Math.max(1, Math.min(6, +opt(m, "days", 4) || 4)), out = "";
     for(var i = 0; i < n && i < w.days.length; i++){
       var d = w.days[i], day = parseDay(d.date);
@@ -198,7 +234,7 @@ body{
         icon(d.code, false) +
         (opt(m, "precip", true) ? '<div class="wet">' + (d.pop == null ? "" : Math.round(d.pop) + "%") + '<br>' +
           (d.amt >= 0.005 ? d.amt.toFixed(2) + '″' : "0″") + '</div>' : "") +
-        '<div class="hilo"><span>' + num(d.hi) + '</span><span class="lo">' + num(d.lo) + '</span></div></div>';
+        '<div class="hilo"><span' + tint(d.hi) + '>' + num(d.hi) + '</span><span class="lo"' + tint(d.lo) + '>' + num(d.lo) + '</span></div></div>';
     }
     el.innerHTML = '<div class="days">' + out + '</div>';
   }};
@@ -210,13 +246,21 @@ body{
     var now = new Date(), today = isoDay(now), tomorrow = isoDay(new Date(midnight().getTime() + 26 * HOUR));
     var last = isoDay(new Date(midnight().getTime() + (+opt(m, "days", 14) || 14) * 24 * HOUR + 2 * HOUR));
     var nowHM = ("0" + now.getHours()).slice(-2) + ":" + ("0" + now.getMinutes()).slice(-2);
+    /* A module may show only some calendars. The layout names them by tag (a
+       random label that says nothing about the calendar). Data from before
+       tags existed has none, and then everything is shown. */
+    var pick = opt(m, "calendars", null);
+    var tagOf = function(c){ return c.id || (TAGS && TAGS[c.name]) || ""; };
+    var tagged = cal.calendars.some(tagOf);
+    var allow = cal.calendars.map(function(c){ return !Array.isArray(pick) || !tagged || pick.indexOf(tagOf(c)) >= 0; });
     var byDay = {}, order = [];
     cal.events.forEach(function(e){
-      if(e.d < today || e.d > last) return;
+      if(e.d < today || e.d > last || allow[e.c] === false) return;
       if(!byDay[e.d]){ byDay[e.d] = []; order.push(e.d); }
       byDay[e.d].push(e);
     });
-    el.innerHTML = order.length ? "" : '<div class="quiet">Nothing on the calendar.</div>';
+    el.innerHTML = order.length ? "" : '<div class="quiet">' +
+      (Array.isArray(pick) && tagged && !pick.length ? "No calendars chosen for this module." : "Nothing on the calendar.") + '</div>';
     /* Add whole days until one would run off the bottom, then stop: a day
        cut in half reads as if its later events did not exist. */
     for(var i = 0; i < order.length; i++){
@@ -274,8 +318,13 @@ body{
       var list = opt(m, "source", "album") === "folder"
         ? (CONFIG.photos || []).map(function(n){ return "photos/" + n; })
         : ((DATA.cal && DATA.cal.photos) || []);
-      var sig = opt(m, "source", "album") + list.length + (list[0] || "");
-      rec.list = list;
+      var sig = opt(m, "source", "album") + list.length + (list[0] || "") + (list[list.length - 1] || "");
+      if(sig !== rec.sig){
+        /* Shuffle, so several albums mix and a restart does not replay the same run. */
+        list = list.slice();
+        for(var i = list.length - 1; i > 0; i--){ var j = Math.floor(Math.random() * (i + 1)), t = list[i]; list[i] = list[j]; list[j] = t; }
+        rec.list = list;
+      }
       var q = el.querySelector(".quiet");
       if(!list.length){
         if(!q){ q = document.createElement("div"); q.className = "quiet"; el.appendChild(q); }
@@ -309,14 +358,111 @@ body{
     el.textContent = opt(m, "text", "");
   }};
 
-  KINDS.countdown = { every:10 * MIN, draw:function(el, m){
-    var target = opt(m, "date", ""), label = opt(m, "label", "");
-    if(!/^\d{4}-\d{2}-\d{2}$/.test(target)){ el.innerHTML = '<div class="quiet">Countdown: no date set</div>'; return; }
-    var days = Math.round((parseDay(target) - midnight()) / 86400000);
-    el.innerHTML = days < 0 ? '<div class="label">' + esc(label) + '</div><div class="unit">' + (-days) + (days === -1 ? " day ago" : " days ago") + '</div>'
-      : '<div class="num">' + (days === 0 ? "Today" : days) + '</div>' + (days === 0 ? "" : '<div class="unit">' + (days === 1 ? "day" : "days") + '</div>') +
-        '<div class="label">' + esc(label) + '</div>';
+  /* A name, a target date and (if wanted) a time. Counts whole days until the
+     last day, then hours and minutes if a time was given. */
+  KINDS.countdown = { every:MIN, draw:function(el, m){
+    var date = opt(m, "date", ""), time = opt(m, "time", ""), label = opt(m, "label", "");
+    el.classList.toggle("tile", opt(m, "tile", true));
+    el.style.setProperty("--tile", opt(m, "color", "#a61e2a") || "#a61e2a");
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){ el.innerHTML = '<div class="label">' + esc(label) + '</div><div class="unit">set a date</div>'; return; }
+    var target = parseDay(date), timed = /^\d{2}:\d{2}$/.test(time);
+    if(timed) target.setHours(+time.slice(0, 2), +time.slice(3), 0, 0);
+    var days = Math.round((midnight(target) - midnight()) / 86400000), ms = target - Date.now(), n, unit;
+    if(days > 0 && !(timed && ms < 24 * HOUR)){ n = days; unit = days === 1 ? "day" : "days"; }
+    else if(timed && ms > 0){
+      if(ms >= HOUR){ n = Math.floor(ms / HOUR); unit = n === 1 ? "hour" : "hours"; }
+      else { n = Math.max(1, Math.ceil(ms / MIN)); unit = n === 1 ? "minute" : "minutes"; }
+    }
+    else if(days === 0){ n = timed ? "Now" : "Today"; unit = ""; }
+    else { n = -days; unit = (n === 1 ? "day" : "days") + " ago"; }
+    el.innerHTML = (label ? '<div class="label">' + esc(label) + '</div>' : "") +
+      '<div class="well"><div class="num">' + n + '</div>' + (unit ? '<div class="unit">' + unit + '</div>' : "") + '</div>';
+    el.style.fontSize = "";
+    var inner = el.scrollHeight, room = el.clientHeight;      /* a long name in a small box: shrink to fit */
+    if(room > 0 && inner > room + 1) el.style.fontSize = "calc(var(--u, 10px) * var(--f, 1) * " + (room / inner * 0.96).toFixed(3) + ")";
   }};
+
+  /* Scores and next games for chosen teams, from ESPN's public schedule feed. */
+  function gameDay(ms, withTime){
+    var d = new Date(ms), day = Math.round((midnight(d) - midnight()) / 86400000);
+    var t = (d.getHours() % 12 || 12) + ":" + ("0" + d.getMinutes()).slice(-2) + (d.getHours() < 12 ? " AM" : " PM");
+    var label = day === 0 ? "Today" : day === 1 ? "Tomorrow" : day === -1 ? "Yesterday"
+              : (day > 1 && day < 7) || (day < -1 && day > -7) ? DAYS[d.getDay()].slice(0, 3) : MON[d.getMonth()] + " " + d.getDate();
+    return withTime ? label + " " + t : label;
+  }
+  KINDS.sports = { every:MIN, draw:function(el, m){
+    var keys = opt(m, "teams", []) || [], rows = [];
+    if(!keys.length){ el.innerHTML = PREVIEW ? '<div class="quiet">Sports: choose teams in this module’s settings</div>' : ""; return; }
+    keys.forEach(function(k){ if(DATA.sports[k]) rows.push(DATA.sports[k]); });
+    if(!rows.length){ el.innerHTML = '<div class="quiet">Scores loading</div>'; return; }
+    var now = Date.now();
+    /* Out of season: nothing coming and nothing recent. */
+    if(opt(m, "hideIdle", true)) rows = rows.filter(function(t){ return t.live || t.next || (t.last && now - t.last.at < 21 * 24 * HOUR); });
+    rows.sort(function(a, b){ return (a.live ? 0 : 1) - (b.live ? 0 : 1) || (a.next ? a.next.at : 9e15) - (b.next ? b.next.at : 9e15); });
+    var vs = function(g){ return (g.home ? "vs " : "at ") + esc(g.opp); };
+    el.innerHTML = rows.length ? rows.map(function(t){
+      var right = t.live ? '<div class="next live">' + esc(t.live.mine) + "–" + esc(t.live.theirs) + '<small>' + vs(t.live) + " · " + esc(t.live.detail) + '</small></div>'
+                : t.next ? '<div class="next">' + gameDay(t.next.at, true) + '<small>' + vs(t.next) + '</small></div>' : '<div class="next"><small>no game scheduled</small></div>';
+      var last = t.last && opt(m, "showLast", true)
+        ? '<div class="last"><b class="' + t.last.res + '">' + t.last.res + '</b> ' + esc(t.last.mine) + "–" + esc(t.last.theirs) + " " + vs(t.last) + " · " + gameDay(t.last.at, false) + '</div>' : '<div class="last"></div>';
+      return '<div class="team">' + (t.logo ? '<img class="logo" alt="" src="' + esc(t.logo) + '">' : '<span class="logo"></span>') +
+             '<div class="nm">' + esc(t.name) + (t.record ? '<small>' + esc(t.record) + '</small>' : "") + '</div>' + right + last + '</div>';
+    }).join("") : '<div class="quiet">No games coming up.</div>';
+    el.style.fontSize = "";
+    var inner = el.scrollHeight, room = el.clientHeight;      /* too many teams for the box: shrink to fit */
+    if(room > 0 && inner > room + 1) el.style.fontSize = "calc(var(--u, 10px) * var(--f, 1) * " + (room / inner * 0.98).toFixed(3) + ")";
+  }};
+
+  /* A picture from a web address, fetched again every few minutes: a radar
+     loop, a webcam, a chart. An animated picture plays as it comes. */
+  KINDS.radar = {
+    mount:function(el, m, rec){ el.innerHTML = '<img alt="">'; rec.url = ""; },
+    draw:function(el, m, rec){
+      var img = el.querySelector("img"), url = String(opt(m, "url", "") || "").trim(), q = el.querySelector(".quiet");
+      el.classList.toggle("round", opt(m, "round", true));
+      img.style.objectFit = opt(m, "fit", "contain");
+      if(q) el.removeChild(q);
+      if(!/^https:\/\//.test(url)){
+        img.removeAttribute("src"); rec.url = "";
+        if(PREVIEW){ q = document.createElement("div"); q.className = "quiet"; q.textContent = "Picture: paste a web address (https://…)"; el.appendChild(q); }
+        return;
+      }
+      function reload(){
+        var pre = new Image();
+        pre.onload = function(){ img.src = pre.src; };       /* a failed fetch leaves the last picture up */
+        pre.src = fresh(url);
+      }
+      if(url !== rec.url){ rec.url = url; reload(); }
+      clearInterval(rec.timer);
+      rec.timer = setInterval(reload, Math.max(1, +opt(m, "minutes", 10) || 10) * MIN);
+    },
+    unmount:function(el, m, rec){ clearInterval(rec.timer); }
+  };
+
+  /* ========================================================== fonts ==== */
+  /* The typefaces a screen or a module may use, with the weights each one
+     comes in. All have a plain zero (no dot, no slash). Only the ones a
+     layout actually names are downloaded. */
+  var FONTS = {
+    "Barlow":"wght@300;400;500;600;700", "Varela Round":"", "Nunito":"wght@300;400;600;700",
+    "Quicksand":"wght@300;400;500;600;700", "Montserrat":"wght@300;400;500;600;700", "Poppins":"wght@300;400;500;600;700",
+    "Fredoka":"wght@300;400;500;600;700", "Comfortaa":"wght@300;400;500;600;700", "Roboto":"wght@300;400;500;700",
+    "Inter":"wght@300;400;500;600;700", "Oswald":"wght@300;400;500;600;700"
+  };
+  var fontsAsked = {"Barlow":true};              /* already linked in the page head */
+  function family(name){
+    if(!name || !(name in FONTS)) return "";
+    if(!fontsAsked[name]){
+      fontsAsked[name] = true;
+      var link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = "https://fonts.googleapis.com/css2?family=" + name.replace(/ /g, "+") + (FONTS[name] ? ":" + FONTS[name] : "") + "&display=swap";
+      /* Letter widths change when a typeface arrives, so lay things out again. */
+      link.onload = function(){ if(document.fonts && document.fonts.ready) document.fonts.ready.then(drawAll); setTimeout(drawAll, 1500); };
+      document.head.appendChild(link);
+    }
+    return '"' + name + '","Barlow","Helvetica Neue",Arial,sans-serif';
+  }
 
   /* ===================================================== the layout ==== */
   function drawOne(rec){ try{ KINDS[rec.mod.type].draw(rec.el, rec.mod, rec); }catch(e){} }
@@ -350,6 +496,7 @@ body{
       var box = document.createElement("div");
       box.className = "screen"; box.dataset.id = sc.id;
       box.style.background = sc.background || "";
+      box.style.fontFamily = family(sc.font);
       (sc.modules || []).forEach(function(m, z){
         if(m.hidden || !KINDS[m.type]) return;
         var el = document.createElement("div");
@@ -358,6 +505,7 @@ body{
         el.style.zIndex = String(z + 1);
         el.style.setProperty("--f", String(+m.font || 1));
         el.style.opacity = String(Math.max(0, Math.min(100, m.opacity == null ? 100 : +m.opacity)) / 100);
+        if(m.fontFamily) el.style.fontFamily = family(m.fontFamily);
         box.appendChild(el);
         var rec = {mod:m, el:el, screen:sc.id}, k = KINDS[m.type];
         if(k.mount) k.mount(el, m, rec);
@@ -510,6 +658,43 @@ body{
       });
   }
 
+  /* ========================================================= sports ==== */
+  function sportsKeys(){
+    var seen = {}, out = [];
+    CONFIG.screens.forEach(function(sc){ (sc.modules || []).forEach(function(m){
+      if(m.type === "sports" && !m.hidden) ((m.opts || {}).teams || []).forEach(function(k){
+        if(!seen[k] && /^[a-z0-9.\-]+\/[a-z0-9.\-]+\/[a-z0-9.\-]+$/i.test(k)){ seen[k] = true; out.push(k); } });
+    }); });
+    return out;
+  }
+  function digestTeam(j){
+    var t = j.team || {}, id = String(t.id);
+    var out = {name:t.name || t.shortDisplayName || t.displayName || t.abbreviation || "", record:t.recordSummary || "",
+               logo:t.logo || (t.logos && t.logos[0] && t.logos[0].href) || "", last:null, next:null, live:null};
+    var score = function(x){ return x.score == null ? "" : (typeof x.score === "object" ? x.score.displayValue : String(x.score)); };
+    (j.events || []).forEach(function(e){
+      var c = e.competitions && e.competitions[0]; if(!c || !c.competitors) return;
+      var me = null, opp = null;
+      c.competitors.forEach(function(x){ if(String(x.team.id) === id) me = x; else opp = x; });
+      if(!me || !opp) return;
+      var st = (c.status && c.status.type) || {}, at = new Date(e.date).getTime();
+      var g = {at:at, opp:opp.team.abbreviation || opp.team.shortDisplayName || "", home:me.homeAway === "home", mine:score(me), theirs:score(opp),
+               res:me.winner === true ? "W" : opp.winner === true ? "L" : "T", detail:st.shortDetail || ""};
+      if(st.state === "in") out.live = g;
+      else if(st.completed){ if(!out.last || at > out.last.at) out.last = g; }
+      else if(st.state === "pre" && at > Date.now() - 4 * HOUR){ if(!out.next || at < out.next.at) out.next = g; }
+    });
+    return out;
+  }
+  function loadSports(){
+    sportsKeys().forEach(function(k){
+      var p = k.split("/");
+      getJSON("https://site.api.espn.com/apis/site/v2/sports/" + p[0] + "/" + p[1] + "/teams/" + p[2] + "/schedule", true)
+        .then(function(j){ DATA.sports[k] = digestTeam(j); drawKind("sports"); }).catch(function(){});
+    });
+  }
+  function anyLive(){ return Object.keys(DATA.sports).some(function(k){ return DATA.sports[k].live; }); }
+
   function loadChores(){
     if(!CONFIG.nextUpFeed) return;
     getJSON(CONFIG.nextUpFeed).then(function(j){
@@ -535,10 +720,15 @@ body{
 
   /* ========================================================== start ==== */
   function useConfig(c){
+    var wasSource = CONFIG && (CONFIG.weather || {}).source;
     CONFIG = c || {};
     CONFIG.screens = CONFIG.screens || []; CONFIG.devices = CONFIG.devices || [];
     pickDevice(hash.device);
     build();
+    note("layout", CONFIG.screens.length || PREVIEW ? "" : hash.k ? "No layout has been published yet."
+                                                               : "This display needs its full address: the key is missing from it.");
+    if(wasSource !== undefined && ((CONFIG.weather || {}).source) !== wasSource){ DATA.wx = null; drawKind("weather", "forecast"); loadWeather(); }
+    loadSports();
   }
   var lastDay = isoDay(new Date());
   function start(c){
@@ -546,8 +736,10 @@ body{
     loadCalendar(); setInterval(loadCalendar, 10 * MIN);
     setInterval(loadWeather, 15 * MIN);
     loadChores(); setInterval(loadChores, HOUR);
-    setInterval(function(){                       /* midnight rolled over */
-      var t = isoDay(new Date()); if(t !== lastDay){ lastDay = t; drawAll(); }
+    setInterval(loadSports, 10 * MIN);
+    setInterval(function(){
+      if(anyLive()) loadSports();                 /* a game is on: keep the score moving */
+      var t = isoDay(new Date()); if(t !== lastDay){ lastDay = t; drawAll(); }   /* midnight rolled over */
     }, MIN);
     window.addEventListener("resize", measure);
     if(PREVIEW && window.parent !== window){
@@ -555,33 +747,47 @@ body{
       window.addEventListener("message", function(ev){
         var d = ev.data || {};
         if(ev.origin !== location.origin || d.type !== "glance-layout") return;
-        var wasSource = (CONFIG.weather || {}).source;
-        CONFIG = d.config; CONFIG.screens = CONFIG.screens || []; CONFIG.devices = CONFIG.devices || [];
-        pickDevice(d.device); shown = d.screen || shown; build();
-        if(((CONFIG.weather || {}).source) !== wasSource){ DATA.wx = null; drawKind("weather", "forecast"); loadWeather(); }
+        TAGS = d.tags || null;
+        hash.device = d.device; shown = d.screen || shown;
+        useConfig(d.config); loadChores();
       });
       window.parent.postMessage({type:"glance-ready"}, location.origin);
     }
   }
-  getJSON("config.json").then(start, function(){ start({}); });
 
-  /* A wall display never reloads on its own, so check hourly whether this
-     page or its layout has changed. A changed layout is applied in place; a
-     changed page reloads. If the check fails (no internet) do nothing: a
-     reload at that moment would replace the display with an error page. */
-  var mine = null, layout = null;
+  /* The layout (screens, modules, their text and addresses) is published
+     locked, like the calendar: layout.enc, opened with the key in this page's
+     address. Nothing about what the display shows is readable in the public
+     repository. config.json is the older, readable form, still honored so a
+     display keeps working until the first locked layout is published. */
+  var layoutText = null;
+  function fetchLayout(){
+    if(!hash.k || !window.crypto || !crypto.subtle) return Promise.reject(new Error("no key"));
+    return fetch(fresh("layout.enc"), {cache:"no-store"})
+      .then(function(r){ if(!r.ok) throw new Error(r.status); return r.text(); })
+      .then(function(text){ return unlock(text).then(function(c){ return {text:text, config:c}; }); });
+  }
+  if(PREVIEW) start({});
+  else fetchLayout().then(function(l){ layoutText = l.text; start(l.config); },
+                          function(){ getJSON("config.json").then(start, function(){ start({}); }); });
+
+  /* A wall display never reloads on its own, so check every ten minutes
+     whether this page or its layout has changed. A changed layout is applied
+     in place; a changed page reloads. If the check fails (no internet) do
+     nothing: a reload at that moment would replace the display with an error
+     page. */
+  var mine = null;
   function checkForChanges(){
     if(PREVIEW) return;
     fetch(fresh(location.pathname), {cache:"no-store"})
       .then(function(r){ if(!r.ok) throw 0; return r.text(); })
       .then(function(t){ if(mine === null) mine = t; else if(t !== mine) location.reload(); })
       .catch(function(){});
-    fetch(fresh("config.json"), {cache:"no-store"})
+    fetch(fresh("layout.enc"), {cache:"no-store"})
       .then(function(r){ if(!r.ok) throw 0; return r.text(); })
       .then(function(t){
-        if(layout === null){ layout = t; return; }
-        if(t !== layout){ layout = t; var src = (CONFIG.weather || {}).source; useConfig(JSON.parse(t));
-          if(((CONFIG.weather || {}).source) !== src){ DATA.wx = null; loadWeather(); } loadChores(); }
+        if(t === layoutText) return;
+        return unlock(t).then(function(c){ layoutText = t; useConfig(c); loadChores(); });
       }).catch(function(){});
   }
   checkForChanges(); setInterval(checkForChanges, 10 * MIN);
