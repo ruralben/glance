@@ -72,7 +72,7 @@ def fetch(addr):
         return r.read()
 
 
-MAX_PHOTOS = 1000        # across all albums together. Google's share page lists
+MAX_PHOTOS = 2000        # across all albums together. Google's share page lists
                          # only about the first 300 pictures of any one album,
                          # so more than that takes more than one album.
 _PHOTO = re.compile(r'\["(https://lh3\.googleusercontent\.com/[^"\\]+)",(\d+),(\d+)')
