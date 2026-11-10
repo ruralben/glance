@@ -92,6 +92,20 @@ body{
 .m-nextup .soon{border-left-color:var(--soon)}   .m-nextup .soon .when{color:var(--soon)}
 .m-nextup .none{font-size:1.3em; color:var(--accent); padding:.3em 0}
 
+/* --- sensors (water detectors and doors, from the SmartThings hub) ------- */
+.m-sensors .hd{display:flex; align-items:baseline; gap:.7em; margin-bottom:.35em; border-bottom:2px solid var(--line-2); padding-bottom:.3em}
+.m-sensors h2{font-size:1.5em; font-weight:700; letter-spacing:.06em; text-transform:uppercase; margin:0}
+.m-sensors .n{font-size:1.05em; color:var(--ink-3); letter-spacing:.05em}
+.m-sensors .stale{font-size:1em; color:var(--due)}
+.m-sensors .row{display:flex; align-items:baseline; gap:.7em; padding:.28em 0 .28em .6em; border-left:.22em solid var(--ink-3); border-bottom:1px solid var(--line)}
+.m-sensors .row:last-child{border-bottom:0}
+.m-sensors .nm{flex:1; min-width:0; font-size:1.35em; font-weight:600}
+.m-sensors .st{font-size:1.25em; font-weight:600; white-space:nowrap; text-align:right; color:var(--ink-2)}
+.m-sensors .st span{display:block; font-size:.7em; font-weight:400; color:var(--ink-3)}
+.m-sensors .bad{border-left-color:var(--over)}  .m-sensors .bad .st{color:var(--over)}
+.m-sensors .warn{border-left-color:var(--due)}  .m-sensors .warn .st{color:var(--due)}
+.m-sensors .none{font-size:1.3em; color:var(--accent); padding:.3em 0}
+
 /* --- photos ------------------------------------------------------------- */
 .m-photos.round{border-radius:.7em}
 .m-photos .pic{position:absolute; inset:0; background-position:center; background-repeat:no-repeat; opacity:0; transition:opacity 1.2s ease}
@@ -155,7 +169,7 @@ body{
   var PREVIEW = "preview" in hash;              /* shown inside the Manager's preview */
 
   var CONFIG = null, device = null, shown = "", turn = 0, rotor = null;
-  var DATA = { cal:null, wx:null, chores:null, sports:{} };  /* what the modules draw from */
+  var DATA = { cal:null, wx:null, chores:null, sports:{}, sensors:null };  /* what the modules draw from */
   var mods = [];                                 /* {mod, el, screen, tick} currently mounted */
   var TAGS = null;                               /* canvas preview only: calendar name -> tag */
   var loop = [];                                 /* the screens this device rotates through, in order */
@@ -377,6 +391,51 @@ body{
     /* A job that falls off the bottom is a job nobody sees: shrink to fit. */
     el.style.fontSize = "";
     var inner = el.scrollHeight, room = el.clientHeight;
+    if(room > 0 && inner > room + 1) el.style.fontSize = "calc(var(--u, 10px) * var(--f, 1) * " + (room / inner * 0.98).toFixed(3) + ")";
+  }};
+
+  /* Sensors: water detectors and doors, as last reported by the SmartThings
+     hub through the listener (the project's sensors folder). The state is
+     whatever word the hub's line carried. Wet outranks open, and both
+     outrank everything that is fine. */
+  var SENSOR_BAD = {wet:1, leak:1, leaking:1, alarm:1, smoke:1}, SENSOR_WARN = {open:1, opened:1, unlocked:1};
+  var SENSOR_WATER = {wet:1, dry:1, leak:1, leaking:1}, SENSOR_DOOR = {open:1, opened:1, closed:1, shut:1};
+  function whenText(iso){
+    var d = new Date(iso); if(isNaN(d)) return "";
+    var t = clock12(("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2));
+    return isoDay(d) === isoDay(new Date()) ? t : MON[d.getMonth()] + " " + d.getDate() + ", " + t;
+  }
+  KINDS.sensors = { every:MIN, draw:function(el, m){
+    var d = DATA.sensors;
+    if(!d){ el.innerHTML = '<div class="quiet">' + esc(DATA.sensorsWhy || "Sensors: no report yet") + '</div>'; return; }
+    var kind = opt(m, "kind", "all"), rows = [];
+    Object.keys(d.sensors || {}).forEach(function(name){
+      var s = d.sensors[name] || {}, st = String(s.state || "");
+      if(kind === "water" && !SENSOR_WATER[st]) return;
+      if(kind === "door" && !SENSOR_DOOR[st]) return;
+      rows.push({name:name, state:st, at:s.at, rank:SENSOR_BAD[st] ? 0 : SENSOR_WARN[st] ? 1 : 2});
+    });
+    rows.sort(function(a, b){ return a.rank - b.rank || a.name.localeCompare(b.name); });
+    var count = {}, order = [];
+    rows.forEach(function(r){ if(r.rank < 2){ if(!count[r.state]){ count[r.state] = 0; order.push(r.state); } count[r.state]++; } });
+    var summary = order.length ? order.map(function(s){ return count[s] + " " + esc(s); }).join(" · ") : rows.length ? "all clear" : "";
+    var shown = opt(m, "show", "all") === "alerts" ? rows.filter(function(r){ return r.rank < 2; }) : rows;
+    var since = opt(m, "since", true);
+    var out = shown.map(function(r){
+      var t = since ? whenText(r.at) : "";
+      return '<div class="row ' + (r.rank === 0 ? "bad" : r.rank === 1 ? "warn" : "ok") + '"><div class="nm">' + esc(r.name) + '</div><div class="st">' +
+             esc(r.state) + (t ? '<span>since ' + t + '</span>' : "") + '</div></div>';
+    }).join("");
+    if(!rows.length) out = '<div class="none">No sensors have reported yet.</div>';
+    else if(!shown.length) out = '<div class="none">' + (kind === "water" ? "All dry." : kind === "door" ? "All closed." : "All dry and closed.") + '</div>';
+    /* The listener sends every half hour even when nothing changes, so a
+       long silence means it has stopped, not that all is well. */
+    var quiet = Date.now() - new Date(d.at).getTime() > 2 * HOUR;
+    var title = String(opt(m, "title", "Sensors") || "");
+    el.innerHTML = '<div class="hd">' + (title ? '<h2>' + esc(title) + '</h2>' : "") + '<span class="n">' + summary + '</span>' +
+      (quiet ? '<span class="stale">last heard ' + whenText(d.at) + '</span>' : "") + '</div><div class="rows">' + out + '</div>';
+    el.style.fontSize = "";
+    var inner = el.scrollHeight, room = el.clientHeight;      /* a sensor off the bottom is a sensor nobody sees */
     if(room > 0 && inner > room + 1) el.style.fontSize = "calc(var(--u, 10px) * var(--f, 1) * " + (room / inner * 0.98).toFixed(3) + ")";
   }};
 
@@ -773,9 +832,9 @@ body{
     for(var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
     return out;
   }
-  function unlock(text){
+  function unlock(text, withKey){               /* withKey: key bytes other than the display's own */
     var raw = b64(text.trim());
-    return crypto.subtle.importKey("raw", b64(hash.k), "AES-GCM", false, ["decrypt"])
+    return crypto.subtle.importKey("raw", withKey instanceof Uint8Array ? withKey : b64(hash.k), "AES-GCM", false, ["decrypt"])
       .then(function(key){ return crypto.subtle.decrypt({name:"AES-GCM", iv:raw.slice(0, 12)}, key, raw.slice(12)); })
       .then(function(buf){ return JSON.parse(new TextDecoder().decode(buf)); });
   }
@@ -817,6 +876,46 @@ body{
         var none = function(){ DATA.calWhy = "Calendar unavailable"; drawKind("calendar"); };
         if(kept) unlock(kept).then(useCalendar).catch(none); else none();
       });
+  }
+
+  /* ======================================================== sensors ==== */
+  /* The listener keeps one locked file, sensors.enc, in a small repository of
+     its own beside this one (same owner, this repository's name plus
+     "-sensors"). Its key is made from the display's key, so the machine that
+     writes the file never holds the key that opens the calendar. */
+  function sensorsWanted(){
+    return CONFIG.screens.some(function(sc){ return (sc.modules || []).some(function(m){ return m.type === "sensors" && !m.hidden; }); });
+  }
+  function sensorsRepo(){
+    var named = CONFIG.sensors && CONFIG.sensors.repo;
+    if(named && /^[A-Za-z0-9_.\-]+\/[A-Za-z0-9_.\-]+$/.test(named)) return named;
+    var m = /^([^.]+)\.github\.io$/.exec(location.hostname), repo = location.pathname.split("/")[1];
+    return m && repo ? m[1] + "/" + repo + "-sensors" : "";
+  }
+  var sensorKeyReady = null;
+  function sensorKey(){
+    if(!sensorKeyReady){
+      var mine = b64(hash.k), tail = new TextEncoder().encode("|glance-sensors-v1"), all = new Uint8Array(mine.length + tail.length);
+      all.set(mine); all.set(tail, mine.length);
+      sensorKeyReady = crypto.subtle.digest("SHA-256", all).then(function(buf){ return new Uint8Array(buf); });
+    }
+    return sensorKeyReady;
+  }
+  var sensorsAsked = 0;
+  function loadSensors(){
+    var repo = sensorsRepo();
+    if(!repo || !sensorsWanted() || !hash.k || !window.crypto || !crypto.subtle) return;
+    if(Date.now() - sensorsAsked < 50000) return;   /* a layout being edited calls here often */
+    sensorsAsked = Date.now();
+    var body = function(r){ if(!r.ok) throw new Error(r.status); return r.text(); };
+    /* GitHub's own address answers with the newest file but allows only so
+       many asks an hour; the plain file address has no limit but can lag by
+       about five minutes. Ask the first, fall back to the second. */
+    fetch("https://api.github.com/repos/" + repo + "/contents/sensors.enc", {cache:"no-store", headers:{Accept:"application/vnd.github.raw+json"}}).then(body)
+      .catch(function(){ return fetch(fresh("https://raw.githubusercontent.com/" + repo + "/main/sensors.enc"), {cache:"no-store"}).then(body); })
+      .then(function(text){ return sensorKey().then(function(key){ return unlock(text, key); }); })
+      .then(function(d){ DATA.sensors = d; DATA.sensorsWhy = ""; drawKind("sensors"); })
+      .catch(function(){ if(!DATA.sensors){ DATA.sensorsWhy = "Sensors: no report yet"; drawKind("sensors"); } });
   }
 
   /* ========================================================= sports ==== */
@@ -890,6 +989,7 @@ body{
                                                                : "This display needs its full address: the key is missing from it.");
     if(wasSource !== undefined && ((CONFIG.weather || {}).source) !== wasSource){ DATA.wx = null; drawKind("weather", "forecast"); loadWeather(); }
     loadSports();
+    if(!DATA.sensors) loadSensors();
   }
   var lastDay = isoDay(new Date());
   function start(c){
@@ -898,6 +998,7 @@ body{
     setInterval(loadWeather, 15 * MIN);
     loadChores(); setInterval(loadChores, HOUR);
     setInterval(loadSports, 10 * MIN);
+    setInterval(loadSensors, PREVIEW ? 10 * MIN : 2 * MIN);
     setInterval(function(){
       if(anyLive()) loadSports();                 /* a game is on: keep the score moving */
       var t = isoDay(new Date()); if(t !== lastDay){ lastDay = t; drawAll(); }   /* midnight rolled over */
