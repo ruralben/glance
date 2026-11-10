@@ -850,17 +850,63 @@ body{
     if(/cloud|overcast/.test(t)) return 3;
     return 0;
   }
-  function fromOpenMeteo(lat, lon){
+  /* Open-Meteo serves several national forecast models through one door.
+     With no model named it picks the best one for the place. */
+  var OM_MODELS = {"om-gfs":"gfs_seamless", "om-ecmwf":"ecmwf_ifs025", "om-gem":"gem_seamless", "om-icon":"icon_seamless", "om-ukmo":"ukmo_seamless"};
+  function fromOpenMeteo(lat, lon, model){
     var u = "https://api.open-meteo.com/v1/forecast?latitude=" + lat + "&longitude=" + lon +
       "&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,is_day" +
-      "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum" +
-      "&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch&timezone=auto&forecast_days=7";
+      "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,cloud_cover_mean" +
+      "&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch&timezone=auto&forecast_days=7" +
+      (model ? "&models=" + model : "");
     return getJSON(u).then(function(w){
       var c = w.current, d = w.daily;
       return { now:{temp:c.temperature_2m, feels:c.apparent_temperature, wind:c.wind_speed_10m,
                     dir:COMPASS[Math.round(c.wind_direction_10m / 45) % 8], code:c.weather_code, night:!c.is_day},
                days:d.time.map(function(t, i){ return {date:t, code:d.weather_code[i], pop:d.precipitation_probability_max[i],
-                    amt:d.precipitation_sum[i] || 0, hi:d.temperature_2m_max[i], lo:d.temperature_2m_min[i]}; }) };
+                    amt:d.precipitation_sum[i] || 0, hi:d.temperature_2m_max[i], lo:d.temperature_2m_min[i],
+                    cloud:d.cloud_cover_mean ? d.cloud_cover_mean[i] : null}; })
+                 .filter(function(x){ return x.hi != null; }) };
+    });
+  }
+  /* OpenWeatherMap and Weatherbit number their conditions alike: 200s storms,
+     300s and 500s rain, 600s snow, 700s fog and haze, 800 clear, then cloudier. */
+  function idCode(id){ return id < 300 ? 95 : id < 600 ? 61 : id < 700 ? 71 : id < 800 ? 45 : id === 800 ? 0 : id <= 802 ? 2 : id >= 900 ? 61 : 3; }
+  function worse(code){ return code >= 95 ? 6 : code >= 71 && code <= 77 ? 5 : code >= 51 ? 4 : code >= 45 ? 3 : code === 3 ? 2 : code ? 1 : 0; }
+  /* OpenWeatherMap (free account and key): now, plus five days in three-hour
+     steps, which are gathered into days here. */
+  function fromOpenWeatherMap(lat, lon, key){
+    if(!key) return Promise.reject(new Error("no key"));
+    var q = "?lat=" + lat + "&lon=" + lon + "&units=imperial&appid=" + encodeURIComponent(key);
+    return Promise.all([getJSON("https://api.openweathermap.org/data/2.5/weather" + q, true),
+                        getJSON("https://api.openweathermap.org/data/2.5/forecast" + q, true)]).then(function(r){
+      var c = r[0], by = {}, order = [];
+      r[1].list.forEach(function(p){
+        var d = isoDay(new Date(p.dt * 1000)), code = idCode(p.weather[0].id);
+        if(!by[d]){ by[d] = {date:d, code:0, pop:0, amt:0, hi:p.main.temp_max, lo:p.main.temp_min, cloud:0, n:0}; order.push(d); }
+        var x = by[d];
+        x.hi = Math.max(x.hi, p.main.temp_max); x.lo = Math.min(x.lo, p.main.temp_min);
+        x.pop = Math.max(x.pop, Math.round((p.pop || 0) * 100));
+        x.amt += (((p.rain && p.rain["3h"]) || 0) + ((p.snow && p.snow["3h"]) || 0)) / 25.4;
+        x.cloud += (p.clouds && p.clouds.all) || 0; x.n++;
+        if(worse(code) > worse(x.code)) x.code = code;
+      });
+      return { now:{temp:c.main.temp, feels:c.main.feels_like, wind:c.wind.speed, dir:COMPASS[Math.round((c.wind.deg || 0) / 45) % 8],
+                    code:idCode(c.weather[0].id), night:/n$/.test(c.weather[0].icon || "")},
+               days:order.map(function(d){ var x = by[d]; x.cloud = x.n ? x.cloud / x.n : null; return x; }) };
+    });
+  }
+  /* Weatherbit (free account and key). Its free plan allows 50 calls a day,
+     so loadWeather asks it far less often than the others. */
+  function fromWeatherbit(lat, lon, key){
+    if(!key) return Promise.reject(new Error("no key"));
+    var q = "?lat=" + lat + "&lon=" + lon + "&units=I&key=" + encodeURIComponent(key);
+    return Promise.all([getJSON("https://api.weatherbit.io/v2.0/current" + q, true),
+                        getJSON("https://api.weatherbit.io/v2.0/forecast/daily" + q + "&days=7", true)]).then(function(r){
+      var c = r[0].data[0];
+      return { now:{temp:c.temp, feels:c.app_temp, wind:c.wind_spd, dir:c.wind_cdir || "", code:idCode(c.weather.code), night:c.pod === "n"},
+               days:r[1].data.map(function(d){ return {date:d.valid_date, code:idCode(d.weather.code), pop:d.pop, amt:d.precip || 0,
+                    hi:d.max_temp, lo:d.min_temp, cloud:d.clouds}; }) };
     });
   }
   /* The US National Weather Service: free, no account, United States only. */
@@ -901,11 +947,25 @@ body{
   function loadWeather(){
     var c = DATA.cal;
     if(!c || c.lat == null){ return; }
-    var src = (CONFIG.weather && CONFIG.weather.source) || "open-meteo";
-    (src === "nws" ? fromNWS(c.lat, c.lon) : fromOpenMeteo(c.lat, c.lon)).then(function(w){
-      w.place = c.place; w.source = src; DATA.wx = w; drawKind("weather", "forecast");
+    var wx = CONFIG.weather || {}, src = wx.source || "open-meteo", keys = wx.keys || {};
+    if(src === "weatherbit" && DATA.wx && DATA.wx.source === src && Date.now() - DATA.wx.at < 85 * MIN) return;
+    var ask = src === "nws" ? fromNWS(c.lat, c.lon)
+            : src === "openweathermap" ? fromOpenWeatherMap(c.lat, c.lon, keys.openweathermap)
+            : src === "weatherbit" ? fromWeatherbit(c.lat, c.lon, keys.weatherbit)
+            : fromOpenMeteo(c.lat, c.lon, OM_MODELS[src]);
+    var use = function(w, from){ w.place = c.place; w.source = from; w.at = Date.now(); DATA.wx = w; drawKind("weather", "forecast"); };
+    ask.then(function(w){
+      if(!w.days.length) throw new Error("no days");
+      note("weather", ""); use(w, src);
     }).catch(function(){
-      if(!DATA.wx){ DATA.wxWhy = "Weather unavailable"; drawKind("weather"); }   /* else keep the last reading up */
+      /* The chosen source did not answer (or its key is missing or refused):
+         show Open-Meteo's forecast rather than nothing, and say so. */
+      if(src === "open-meteo"){ if(!DATA.wx){ DATA.wxWhy = "Weather unavailable"; drawKind("weather"); } return; }
+      fromOpenMeteo(c.lat, c.lon).then(function(w){
+        note("weather", "weather source did not answer; showing Open-Meteo"); use(w, "open-meteo");
+      }).catch(function(){
+        if(!DATA.wx){ DATA.wxWhy = "Weather unavailable"; drawKind("weather"); }   /* else keep the last reading up */
+      });
     });
   }
 
@@ -1066,14 +1126,14 @@ body{
 
   /* ========================================================== start ==== */
   function useConfig(c){
-    var wasSource = CONFIG && (CONFIG.weather || {}).source;
+    var wasSource = CONFIG ? JSON.stringify(CONFIG.weather || {}) : undefined;
     CONFIG = c || {};
     CONFIG.screens = CONFIG.screens || []; CONFIG.devices = CONFIG.devices || [];
     pickDevice(hash.device);
     build();
     note("layout", CONFIG.screens.length || PREVIEW ? "" : hash.k ? "No layout has been published yet."
                                                                : "This display needs its full address: the key is missing from it.");
-    if(wasSource !== undefined && ((CONFIG.weather || {}).source) !== wasSource){ DATA.wx = null; drawKind("weather", "forecast"); loadWeather(); }
+    if(wasSource !== undefined && JSON.stringify(CONFIG.weather || {}) !== wasSource){ DATA.wx = null; drawKind("weather", "forecast"); loadWeather(); }
     loadSports();
     if(!DATA.sensors) loadSensors();
   }
