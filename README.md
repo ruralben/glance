@@ -1,7 +1,7 @@
 # Glance Digital Wall Calendar
 
 The display on the kitchen wall: clock, weather, the family calendar, photos,
-scores and the Chore Factory "Next Up" list, laid out however the household
+scores and the Chore Factory chore list, laid out however the household
 likes.
 
 ## How it works
@@ -31,7 +31,7 @@ list comes from the Chore Factory feed.
 ## Screens, modules and devices
 
 A layout has up to four screens. A screen holds modules (date and time,
-weather, forecast, calendar, Next Up, photos, sports, radar or web picture,
+weather, forecast, calendar, Chore Factory, photos, sports, radar or web picture,
 countdown, text), each placed by percentages of the screen so one layout fits
 any resolution. A device is one display; it shows the screens assigned to it
 and rotates through them if there is more than one. A display chooses its

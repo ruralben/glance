@@ -70,7 +70,7 @@ body{
 .m-calendar .ev .what{font-size:1.45em; line-height:1.25; min-width:0; overflow-wrap:anywhere}
 .m-calendar .ev.past{opacity:.45}
 
-/* --- Next Up ------------------------------------------------------------ */
+/* --- Chore Factory (chores due) ----------------------------------------- */
 .m-nextup .hd{display:flex; align-items:baseline; gap:.7em; margin-bottom:.35em; border-bottom:2px solid var(--line-2); padding-bottom:.3em}
 .m-nextup h2{font-size:1.5em; font-weight:700; letter-spacing:.06em; text-transform:uppercase; margin:0}
 .m-nextup .n{font-size:1.05em; color:var(--ink-3); letter-spacing:.05em}
@@ -297,7 +297,7 @@ body{
     });
     if(!n) out = '<div class="none">Nothing due in the next ' + horizon + ' days.</div>';
     var age = Math.round((now - parseDay(c.generated)) / 86400000);
-    el.innerHTML = '<div class="hd"><h2>Next Up</h2><span class="n">' + (n ? n + (n === 1 ? " job" : " jobs") + " · next " + horizon + " days" : "all clear") +
+    el.innerHTML = '<div class="hd"><h2>Chore Factory</h2><span class="n">' + (n ? n + (n === 1 ? " job" : " jobs") + " · next " + horizon + " days" : "all clear") +
       '</span>' + (age > horizon ? '<span class="stale">list is ' + age + ' days old</span>' : "") + '</div><div class="rows">' + out + '</div>';
     /* A job that falls off the bottom is a job nobody sees: shrink to fit. */
     el.style.fontSize = "";
