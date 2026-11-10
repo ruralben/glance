@@ -445,8 +445,9 @@ body{
      hub through the listener (the project's sensors folder). The state is
      whatever word the hub's line carried. Wet outranks open, and both
      outrank everything that is fine. */
-  var SENSOR_BAD = {wet:1, leak:1, leaking:1, alarm:1, smoke:1}, SENSOR_WARN = {open:1, opened:1, unlocked:1};
-  var SENSOR_WATER = {wet:1, dry:1, leak:1, leaking:1}, SENSOR_DOOR = {open:1, opened:1, closed:1, shut:1};
+  /* A water shut-off valve reports "water on" or "water off"; off is the one worth noticing. */
+  var SENSOR_BAD = {wet:1, leak:1, leaking:1, alarm:1, smoke:1}, SENSOR_WARN = {open:1, opened:1, unlocked:1, "water off":1};
+  var SENSOR_WATER = {wet:1, dry:1, leak:1, leaking:1, "water on":1, "water off":1}, SENSOR_DOOR = {open:1, opened:1, closed:1, shut:1};
   var ICON_DOOR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
     '<path d="M3 21h18"/><path d="M6 21V3.5h7"/><path d="M13 2.5l6 2.2v16.3l-6-1.4z" fill="currentColor" fill-opacity=".28"/><circle cx="15.2" cy="12.6" r=".7" fill="currentColor" stroke="none"/></svg>';
   var ICON_DROP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
@@ -769,14 +770,22 @@ body{
   /* The loop: a device's screens in turn. Started afresh whenever a button
      jumps somewhere, so the screen jumped to gets its full time and the
      loop then carries on from there. */
+  /* How long a screen stays up: its own time on this device if it has one,
+     otherwise the device's time for every screen. */
+  function secondsFor(id){
+    if(!device) return 0;
+    var own = device.screenSeconds ? +device.screenSeconds[id] || 0 : 0;
+    return own >= 3 ? own : +device.rotateSeconds || 0;
+  }
   function startLoop(){
-    clearInterval(rotor);
-    var secs = device ? +device.rotateSeconds || 0 : 0;
+    clearTimeout(rotor);
+    var secs = secondsFor(shown);
     if(PREVIEW || loop.length < 2 || secs < 3) return;
-    rotor = setInterval(function(){
+    rotor = setTimeout(function(){
       var at = loop.indexOf(shown);
       turn = ((at >= 0 ? at : turn) + 1) % loop.length;
       show(loop[turn]);
+      startLoop();                 /* the next screen may have a different time */
     }, secs * 1000);
   }
   function jump(id){
