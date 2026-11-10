@@ -102,9 +102,22 @@ body{
 .m-sensors .nm{flex:1; min-width:0; font-size:1.35em; font-weight:600}
 .m-sensors .st{font-size:1.25em; font-weight:600; white-space:nowrap; text-align:right; color:var(--ink-2)}
 .m-sensors .st span{display:block; font-size:.7em; font-weight:400; color:var(--ink-3)}
+.m-sensors .bt{font-size:1.05em; color:var(--ink-3); white-space:nowrap; font-variant-numeric:tabular-nums; min-width:3em; text-align:right}
+.m-sensors .bt.low{font-weight:700}
+.m-sensors .st{min-width:4.6em}
 .m-sensors .bad{border-left-color:var(--over)}  .m-sensors .bad .st{color:var(--over)}
 .m-sensors .warn{border-left-color:var(--due)}  .m-sensors .warn .st{color:var(--due)}
 .m-sensors .none{font-size:1.3em; color:var(--accent); padding:.3em 0}
+/* Symbols: a door or a drop for each sensor that is open or wet, and nothing
+   at all when everything is fine. */
+.m-sensors.symbols{display:flex; flex-direction:column; justify-content:center}
+.m-sensors .syms{display:flex; flex-wrap:wrap; gap:1em 1.6em; align-items:flex-start; justify-content:center}
+.m-sensors .sym{display:flex; flex-direction:column; align-items:center; text-align:center; min-width:6em; max-width:11em}
+.m-sensors .sym svg{width:4.4em; height:4.4em}
+.m-sensors .sym b{font-size:1.25em; font-weight:600; line-height:1.15; margin-top:.25em; color:var(--ink)}
+.m-sensors .sym small{font-size:.9em; color:var(--ink-3); margin-top:.15em}
+.m-sensors .sym.bad{color:var(--over)}  .m-sensors .sym.warn{color:var(--due)}
+.m-sensors .symnote{font-size:1em; color:var(--due); text-align:center; margin-top:.5em}
 
 /* --- photos ------------------------------------------------------------- */
 .m-photos.round{border-radius:.7em}
@@ -400,6 +413,23 @@ body{
      outrank everything that is fine. */
   var SENSOR_BAD = {wet:1, leak:1, leaking:1, alarm:1, smoke:1}, SENSOR_WARN = {open:1, opened:1, unlocked:1};
   var SENSOR_WATER = {wet:1, dry:1, leak:1, leaking:1}, SENSOR_DOOR = {open:1, opened:1, closed:1, shut:1};
+  var ICON_DOOR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    '<path d="M3 21h18"/><path d="M6 21V3.5h7"/><path d="M13 2.5l6 2.2v16.3l-6-1.4z" fill="currentColor" fill-opacity=".28"/><circle cx="15.2" cy="12.6" r=".7" fill="currentColor" stroke="none"/></svg>';
+  var ICON_DROP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    '<path d="M12 2.8c3.2 4.6 6.2 7.7 6.2 11.2a6.2 6.2 0 0 1-12.4 0c0-3.5 3-6.6 6.2-11.2z" fill="currentColor" fill-opacity=".28"/><path d="M9.2 14.6a2.9 2.9 0 0 0 2.4 2.7"/></svg>';
+  /* Battery percent shades toward red as it runs down: quiet gray when
+     healthy, amber by 35, full red at 10 and under. */
+  function batteryColor(p){
+    var stops = [[10, [226, 86, 74]], [35, [240, 169, 59]], [70, [150, 160, 168]]];
+    if(p <= stops[0][0]) return "rgb(" + stops[0][1].join(",") + ")";
+    for(var i = 1; i < stops.length; i++){
+      if(p <= stops[i][0]){
+        var a = stops[i - 1], b = stops[i], f = (p - a[0]) / (b[0] - a[0]);
+        return "rgb(" + a[1].map(function(v, k){ return Math.round(v + (b[1][k] - v) * f); }).join(",") + ")";
+      }
+    }
+    return "rgb(" + stops[stops.length - 1][1].join(",") + ")";
+  }
   function whenText(iso){
     var d = new Date(iso); if(isNaN(d)) return "";
     var t = clock12(("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2));
@@ -408,12 +438,13 @@ body{
   KINDS.sensors = { every:MIN, draw:function(el, m){
     var d = DATA.sensors;
     if(!d){ el.innerHTML = '<div class="quiet">' + esc(DATA.sensorsWhy || "Sensors: no report yet") + '</div>'; return; }
-    var kind = opt(m, "kind", "all"), rows = [];
+    var kind = opt(m, "kind", "all"), rows = [], only = opt(m, "names", null);
     Object.keys(d.sensors || {}).forEach(function(name){
       var s = d.sensors[name] || {}, st = String(s.state || "");
+      if(Array.isArray(only) && only.indexOf(name) < 0) return;     /* this module shows chosen sensors only */
       if(kind === "water" && !SENSOR_WATER[st]) return;
       if(kind === "door" && !SENSOR_DOOR[st]) return;
-      rows.push({name:name, state:st, at:s.at, rank:SENSOR_BAD[st] ? 0 : SENSOR_WARN[st] ? 1 : 2});
+      rows.push({name:name, state:st, at:s.at, battery:s.battery, rank:SENSOR_BAD[st] ? 0 : SENSOR_WARN[st] ? 1 : 2});
     });
     rows.sort(function(a, b){ return a.rank - b.rank || a.name.localeCompare(b.name); });
     var count = {}, order = [];
@@ -421,16 +452,35 @@ body{
     var summary = order.length ? order.map(function(s){ return count[s] + " " + esc(s); }).join(" · ") : rows.length ? "all clear" : "";
     var shown = opt(m, "show", "all") === "alerts" ? rows.filter(function(r){ return r.rank < 2; }) : rows;
     var since = opt(m, "since", true);
+    /* The listener sends every half hour even when nothing changes, so a
+       long silence means it has stopped, not that all is well. */
+    var quiet = Date.now() - new Date(d.at).getTime() > 2 * HOUR;
+    var symbols = opt(m, "look", "list") === "symbols";
+    el.classList.toggle("symbols", symbols);
+    if(symbols){
+      var alerts = rows.filter(function(r){ return r.rank < 2; });
+      el.innerHTML = (alerts.length ? '<div class="syms">' + alerts.map(function(r){
+          var t = since ? whenText(r.at) : "";
+          return '<div class="sym ' + (r.rank === 0 ? "bad" : "warn") + '">' + (SENSOR_WATER[r.state] ? ICON_DROP : ICON_DOOR) +
+                 '<b>' + esc(r.name) + '</b><small>' + esc(r.state) + (t ? ' since ' + t : "") + '</small></div>'; }).join("") + '</div>'
+        : PREVIEW ? '<div class="quiet">Symbols: nothing open or wet right now</div>' : "") +
+        (quiet ? '<div class="symnote">sensors last heard ' + whenText(d.at) + '</div>' : "");
+      el.style.fontSize = "";
+      var tall = el.scrollHeight, space = el.clientHeight;
+      if(space > 0 && tall > space + 1) el.style.fontSize = "calc(var(--u, 10px) * var(--f, 1) * " + (space / tall * 0.98).toFixed(3) + ")";
+      return;
+    }
+    var showBattery = opt(m, "battery", true);
     var out = shown.map(function(r){
       var t = since ? whenText(r.at) : "";
-      return '<div class="row ' + (r.rank === 0 ? "bad" : r.rank === 1 ? "warn" : "ok") + '"><div class="nm">' + esc(r.name) + '</div><div class="st">' +
+      /* Battery percent, where the hub has reported one; red at 20 and under. */
+      var bt = showBattery && typeof r.battery === "number"
+        ? '<div class="bt' + (r.battery <= 20 ? " low" : "") + '" style="color:' + batteryColor(r.battery) + '">' + r.battery + '%</div>' : "";
+      return '<div class="row ' + (r.rank === 0 ? "bad" : r.rank === 1 ? "warn" : "ok") + '"><div class="nm">' + esc(r.name) + '</div>' + bt + '<div class="st">' +
              esc(r.state) + (t ? '<span>since ' + t + '</span>' : "") + '</div></div>';
     }).join("");
     if(!rows.length) out = '<div class="none">No sensors have reported yet.</div>';
     else if(!shown.length) out = '<div class="none">' + (kind === "water" ? "All dry." : kind === "door" ? "All closed." : "All dry and closed.") + '</div>';
-    /* The listener sends every half hour even when nothing changes, so a
-       long silence means it has stopped, not that all is well. */
-    var quiet = Date.now() - new Date(d.at).getTime() > 2 * HOUR;
     var title = String(opt(m, "title", "Sensors") || "");
     el.innerHTML = '<div class="hd">' + (title ? '<h2>' + esc(title) + '</h2>' : "") + '<span class="n">' + summary + '</span>' +
       (quiet ? '<span class="stale">last heard ' + whenText(d.at) + '</span>' : "") + '</div><div class="rows">' + out + '</div>';
