@@ -39,7 +39,7 @@ device with `&device=<id>` in its address.
 
 ## Changing things
 
-Everything is edited in the Glance canvas, a local editor on the home PC
+Everything is edited in the Glance Digital Wall Calendar Manager, a local editor on the home PC
 (started from the Server Hub; it is not part of this repository). Its Publish
 button encrypts the layout and sends it here. Displays check every ten
 minutes and apply a changed layout by themselves.

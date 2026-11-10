@@ -152,7 +152,7 @@ body{
   location.hash.replace(/^#/, "").split("&").forEach(function(p){
     var i = p.indexOf("="); if(i > 0) hash[p.slice(0, i)] = decodeURIComponent(p.slice(i + 1)); else if(p) hash[p] = "";
   });
-  var PREVIEW = "preview" in hash;              /* shown inside the Glance canvas */
+  var PREVIEW = "preview" in hash;              /* shown inside the Manager's preview */
 
   var CONFIG = null, device = null, shown = "", turn = 0, rotor = null;
   var DATA = { cal:null, wx:null, chores:null, sports:{} };  /* what the modules draw from */
@@ -775,7 +775,7 @@ body{
     if(CONFIG.dataUrl) return CONFIG.dataUrl;
     var m = /^([^.]+)\.github\.io$/.exec(location.hostname), repo = location.pathname.split("/")[1];
     if(m && repo) return "https://raw.githubusercontent.com/" + m[1] + "/" + repo + "/data/calendar.enc";
-    return "calendar.enc";                       /* the Glance canvas, or testing */
+    return "calendar.enc";                       /* the Manager's preview, or testing */
   }
   function useCalendar(data){
     var moved = !DATA.cal || DATA.cal.lat !== data.lat || DATA.cal.lon !== data.lon;
@@ -896,7 +896,7 @@ body{
     }, MIN);
     window.addEventListener("resize", measure);
     if(PREVIEW && window.parent !== window){
-      /* Inside the Glance canvas: take the layout being edited from the editor. */
+      /* Inside the Manager: take the layout being edited from the editor. */
       window.addEventListener("message", function(ev){
         var d = ev.data || {};
         if(ev.origin !== location.origin || d.type !== "glance-layout") return;
