@@ -69,6 +69,11 @@ body{
 .m-calendar .ev .when{flex:none; width:5.2em; font-size:1.05em; color:var(--ink-2); text-transform:uppercase; letter-spacing:.02em}
 .m-calendar .ev .what{font-size:1.45em; line-height:1.25; min-width:0; overflow-wrap:anywhere}
 .m-calendar .ev.past{opacity:.45}
+.m-calendar .roll{will-change:transform}
+/* More below than fits: fade the bottom edge so it reads as "continues". */
+.m-calendar.more{-webkit-mask-image:linear-gradient(to bottom, #000 0, #000 90%, transparent 100%); mask-image:linear-gradient(to bottom, #000 0, #000 90%, transparent 100%)}
+.m-calendar.byhand{overflow-y:auto; scrollbar-width:none; overscroll-behavior:contain}
+.m-calendar.byhand::-webkit-scrollbar{display:none}
 
 /* --- Chore Factory (chores due) ----------------------------------------- */
 .m-nextup .hd{display:flex; align-items:baseline; gap:.7em; margin-bottom:.35em; border-bottom:2px solid var(--line-2); padding-bottom:.3em}
@@ -252,45 +257,103 @@ body{
   }};
 
   function clock12(hm){ var p = hm.split(":"), h = +p[0]; return (h % 12 || 12) + ":" + p[1] + (h < 12 ? " AM" : " PM"); }
-  KINDS.calendar = { every:5 * MIN, draw:function(el, m){
-    var cal = DATA.cal;
-    if(!cal){ el.innerHTML = '<div class="quiet">' + (DATA.calWhy || "Calendar loading") + '</div>'; return; }
-    var now = new Date(), today = isoDay(now), tomorrow = isoDay(new Date(midnight().getTime() + 26 * HOUR));
-    var last = isoDay(new Date(midnight().getTime() + (+opt(m, "days", 14) || 14) * 24 * HOUR + 2 * HOUR));
-    var nowHM = ("0" + now.getHours()).slice(-2) + ":" + ("0" + now.getMinutes()).slice(-2);
-    /* A module may show only some calendars. The layout names them by tag (a
-       random label that says nothing about the calendar). Data from before
-       tags existed has none, and then everything is shown. */
-    var pick = opt(m, "calendars", null);
-    var tagOf = function(c){ return c.id || (TAGS && TAGS[c.name]) || ""; };
-    var tagged = cal.calendars.some(tagOf);
-    var allow = cal.calendars.map(function(c){ return !Array.isArray(pick) || !tagged || pick.indexOf(tagOf(c)) >= 0; });
-    var byDay = {}, order = [];
-    cal.events.forEach(function(e){
-      if(e.d < today || e.d > last || allow[e.c] === false) return;
-      if(!byDay[e.d]){ byDay[e.d] = []; order.push(e.d); }
-      byDay[e.d].push(e);
-    });
-    el.innerHTML = order.length ? "" : '<div class="quiet">' +
-      (Array.isArray(pick) && tagged && !pick.length ? "No calendars chosen for this module." : "Nothing on the calendar.") + '</div>';
-    /* Add whole days until one would run off the bottom, then stop: a day
-       cut in half reads as if its later events did not exist. */
-    for(var i = 0; i < order.length; i++){
-      var d = order[i], date = parseDay(d);
-      var label = d === today ? "Today" : d === tomorrow ? "Tomorrow" : DAYS[date.getDay()];
-      var html = '<div class="dayhead"><span class="num">' + ("0" + date.getDate()).slice(-2) + '</span><span class="lab">' + label + '</span></div>';
-      byDay[d].forEach(function(e){
-        var color = (cal.calendars[e.c] || {}).color || "";
-        var past = d === today && e.t && (e.e || e.t) < nowHM;
-        html += '<div class="ev' + (past ? " past" : "") + '" style="border-left-color:' + esc(color) + '"><span class="when">' +
-                (e.t ? clock12(e.t) : "All day") + '</span><span class="what">' + esc(e.s) + '</span></div>';
+  /* When there is more calendar than fits the box, the module does one of
+     three things, chosen in its settings:
+       auto    scrolls by itself: waits, glides to the end, waits, starts over
+       manual  stays put until scrolled with a mouse wheel, a finger or the
+               remote's up and down keys; goes back to the top when left alone
+       fit     shows only the whole days that fit, and no more */
+  KINDS.calendar = { every:5 * MIN,
+    unmount:function(el, m, rec){ clearTimeout(rec.roll); clearTimeout(rec.idle); },
+    draw:function(el, m, rec, again){
+      rec = rec || {};
+      var cal = DATA.cal;
+      if(!cal){ clearTimeout(rec.roll); rec.sig = ""; el.className = "mod m-calendar"; el.innerHTML = '<div class="quiet">' + (DATA.calWhy || "Calendar loading") + '</div>'; return; }
+      var mode = opt(m, "overflow", "auto");
+      var now = new Date(), today = isoDay(now), tomorrow = isoDay(new Date(midnight().getTime() + 26 * HOUR));
+      /* While it is gliding, leave it alone unless something it shows has
+         changed; each pass rebuilds the list anyway when it starts over. */
+      var sig = [cal.generated, today, mode, JSON.stringify(m.opts || {}), el.clientWidth, el.clientHeight, getComputedStyle(el).fontSize, getComputedStyle(el).fontFamily].join("|");
+      if(!again && mode === "auto" && rec.rolling && sig === rec.sig) return;
+      rec.sig = sig;
+      clearTimeout(rec.roll); rec.rolling = false;
+
+      var last = isoDay(new Date(midnight().getTime() + (+opt(m, "days", 14) || 14) * 24 * HOUR + 2 * HOUR));
+      var nowHM = ("0" + now.getHours()).slice(-2) + ":" + ("0" + now.getMinutes()).slice(-2);
+      /* A module may show only some calendars. The layout names them by tag (a
+         random label that says nothing about the calendar). Data from before
+         tags existed has none, and then everything is shown. */
+      var pick = opt(m, "calendars", null);
+      var tagOf = function(c){ return c.id || (TAGS && TAGS[c.name]) || ""; };
+      var tagged = cal.calendars.some(tagOf);
+      var allow = cal.calendars.map(function(c){ return !Array.isArray(pick) || !tagged || pick.indexOf(tagOf(c)) >= 0; });
+      var byDay = {}, order = [];
+      cal.events.forEach(function(e){
+        if(e.d < today || e.d > last || allow[e.c] === false) return;
+        if(!byDay[e.d]){ byDay[e.d] = []; order.push(e.d); }
+        byDay[e.d].push(e);
       });
-      var block = document.createElement("div");
-      block.className = "dayblock"; block.innerHTML = html;
-      el.appendChild(block);
-      if(el.scrollHeight > el.clientHeight + 1 && i > 0){ el.removeChild(block); break; }
+
+      var keep = mode === "manual" ? el.scrollTop : 0;      /* a redraw must not yank a hand-scrolled list back */
+      el.className = "mod m-calendar" + (mode === "manual" ? " byhand" : "");
+      el.innerHTML = "";
+      if(!order.length){
+        el.innerHTML = '<div class="quiet">' + (Array.isArray(pick) && tagged && !pick.length ? "No calendars chosen for this module." : "Nothing on the calendar.") + '</div>';
+        return;
+      }
+      var inner = document.createElement("div");
+      inner.className = "roll";
+      el.appendChild(inner);
+      for(var i = 0; i < order.length; i++){
+        var d = order[i], date = parseDay(d);
+        var label = d === today ? "Today" : d === tomorrow ? "Tomorrow" : DAYS[date.getDay()];
+        var html = '<div class="dayhead"><span class="num">' + ("0" + date.getDate()).slice(-2) + '</span><span class="lab">' + label + '</span></div>';
+        byDay[d].forEach(function(e){
+          var color = (cal.calendars[e.c] || {}).color || "";
+          var past = d === today && e.t && (e.e || e.t) < nowHM;
+          html += '<div class="ev' + (past ? " past" : "") + '" style="border-left-color:' + esc(color) + '"><span class="when">' +
+                  (e.t ? clock12(e.t) : "All day") + '</span><span class="what">' + esc(e.s) + '</span></div>';
+        });
+        var block = document.createElement("div");
+        block.className = "dayblock"; block.innerHTML = html;
+        inner.appendChild(block);
+        /* "fit": add whole days until one would run off the bottom, then stop.
+           A day cut in half reads as if its later events did not exist. */
+        if(mode === "fit" && inner.offsetHeight > el.clientHeight + 1 && i > 0){ inner.removeChild(block); break; }
+      }
+      var extra = inner.offsetHeight - el.clientHeight;
+      el.classList.toggle("more", extra > 2 && mode !== "fit");
+      if(extra <= 2) return;
+
+      if(mode === "manual"){
+        el.scrollTop = keep;
+        if(!rec.wired){
+          rec.wired = true;
+          el.addEventListener("scroll", function(){
+            clearTimeout(rec.idle);
+            rec.idle = setTimeout(function(){ if(el.isConnected && el.scrollTop > 0) el.scrollTo({top:0, behavior:"smooth"}); }, 60000);
+          });
+        }
+        return;
+      }
+      if(mode !== "auto") return;
+      /* Speed 1 to 10. It is tied to the text size, so the pace reads the same
+         on any display: speed 3 is roughly one line a second. */
+      var unit = parseFloat(getComputedStyle(el).fontSize) || 16;
+      var secs = extra / (Math.max(1, Math.min(10, +opt(m, "speed", 3) || 3)) * unit * 0.45);
+      rec.rolling = true;
+      inner.style.transform = "translateY(0)";
+      rec.roll = setTimeout(function(){                       /* wait at the top */
+        if(!el.isConnected) return;
+        inner.style.transition = "transform " + secs.toFixed(2) + "s linear";
+        inner.style.transform = "translateY(" + (-extra) + "px)";
+        rec.roll = setTimeout(function(){                     /* glide, then wait at the end */
+          inner.style.transition = "opacity .5s ease"; inner.style.opacity = "0";
+          rec.roll = setTimeout(function(){ if(el.isConnected) KINDS.calendar.draw(el, m, rec, true); }, 600);
+        }, secs * 1000 + 3500);
+      }, 5000);
     }
-  }};
+  };
 
   KINDS.nextup = { draw:function(el, m){
     var c = DATA.chores; if(!c){ el.innerHTML = ""; return; }
@@ -591,6 +654,16 @@ body{
   var remoteUsed = false;
   window.addEventListener("keydown", function(e){
     if(PREVIEW) return;
+    /* Up and down belong to a hand-scrolled calendar when there is one with
+       more to show; buttons are then reached with left and right. */
+    if(e.key === "ArrowDown" || e.key === "ArrowUp"){
+      var lists = Array.prototype.filter.call(stage.querySelectorAll(".screen.on .m-calendar.byhand"), function(c){ return c.scrollHeight > c.clientHeight + 2; });
+      if(lists.length){
+        e.preventDefault();
+        lists.forEach(function(c){ c.scrollBy({top:(e.key === "ArrowDown" ? 1 : -1) * c.clientHeight * 0.5, behavior:"smooth"}); });
+        return;
+      }
+    }
     var btns = Array.prototype.slice.call(stage.querySelectorAll(".screen.on .go"));
     if(!btns.length) return;
     var at = btns.indexOf(document.activeElement);
