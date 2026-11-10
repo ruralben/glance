@@ -47,7 +47,11 @@ def parse_settings(text):
         elif key == "timezone" and val:
             out["tz"] = val
         elif key == "photos" and val:
-            out["albums"].append(val)            # one line per album
+            # one line per album:  link | name | tag  (name and tag optional)
+            parts = [p.strip() for p in val.split("|")]
+            if parts[0]:
+                out["albums"].append({"link": parts[0], "name": parts[1] if len(parts) > 1 else "",
+                                      "id": parts[2] if len(parts) > 2 else ""})
         elif key == "calendar":
             # name | color | address | tag. The tag is a short random label the
             # layout uses to say which calendars a module shows; it gives
@@ -107,14 +111,15 @@ def album_photos(link):
 def pool(lists, limit):
     """One list from several albums: take turns between them so that every
     album is represented if the total has to be cut off, and drop repeats."""
-    seen, out, i = set(), [], 0
+    seen, out, owner, i = set(), [], [], 0
     while len(out) < limit and any(i < len(l) for l in lists):
-        for l in lists:
+        for n, l in enumerate(lists):
             if i < len(l) and l[i] not in seen and len(out) < limit:
                 seen.add(l[i])
                 out.append(l[i])
+                owner.append(n)             # which album each picture came from
         i += 1
-    return out
+    return out, owner
 
 
 def events_from(ics_bytes, cal_index, tz, first, last):
@@ -208,24 +213,28 @@ def main():
 
     events.sort(key=lambda r: (r["d"], r["t"] != "", r["t"], r["s"].lower()))
 
-    photos, photos_failed = [], False
+    photos, photo_of, photos_failed = [], [], False
     if settings["albums"]:
         got = []
-        for n, link in enumerate(settings["albums"], 1):
+        for n, album in enumerate(settings["albums"], 1):
             try:
-                got.append(album_photos(link))
+                got.append(album_photos(album["link"]))
                 print("photo album %d: %d picture(s)" % (n, len(got[-1])))
             except Exception as ex:
                 photos_failed = True
+                got.append([])                  # keep its place, so album numbers stay true
                 print("photo album %d: FAILED (%s)" % (n, type(ex).__name__))
-        photos = pool(got, MAX_PHOTOS)
+        photos, photo_of = pool(got, MAX_PHOTOS)
         if photos_failed and old and len(old.get("photos", [])) > len(photos):
             # Better last time's fuller list than a thinner one from a bad run.
-            photos = old["photos"]
+            photos, photo_of = old["photos"], old.get("photoOf", [])
         print("photos: %d in the list" % len(photos))
 
     body = {
         "photos": photos, "photosFailed": photos_failed,
+        # photoOf[i] is the album (by position in "albums") that photos[i] came
+        # from, so a Photos module can show only the albums chosen for it.
+        "photoOf": photo_of, "albums": [{"id": a["id"], "name": a["name"]} for a in settings["albums"]],
         "tz": settings["tz"], "lat": settings["lat"], "lon": settings["lon"],
         "place": settings["place"], "from": first.isoformat(), "to": last.isoformat(),
         "calendars": [{"name": c["name"], "color": c["color"], "id": c["id"]} for c in settings["calendars"]],

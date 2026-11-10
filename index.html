@@ -393,7 +393,15 @@ body{
       var list = opt(m, "source", "album") === "folder"
         ? (CONFIG.photos || []).map(function(n){ return "photos/" + n; })
         : ((DATA.cal && DATA.cal.photos) || []);
-      var sig = opt(m, "source", "album") + list.length + (list[0] || "") + (list[list.length - 1] || "");
+      /* A module may show only some albums, named by tag like calendars are.
+         Data from before albums had tags says nothing about which picture
+         came from where, and then every picture is shown. */
+      var pick = opt(m, "albums", null), c = DATA.cal;
+      if(opt(m, "source", "album") !== "folder" && Array.isArray(pick) && c && c.albums && c.photoOf && c.albums.some(function(a){ return a.id; })){
+        var ok = c.albums.map(function(a){ return pick.indexOf(a.id) >= 0; });
+        list = list.filter(function(u, i){ return ok[c.photoOf[i]]; });
+      }
+      var sig = opt(m, "source", "album") + JSON.stringify(pick) + list.length + (list[0] || "") + (list[list.length - 1] || "");
       if(sig !== rec.sig){
         /* Shuffle, so several albums mix and a restart does not replay the same run. */
         list = list.slice();
