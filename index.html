@@ -97,7 +97,7 @@ body{
 .m-sensors h2{font-size:1.5em; font-weight:700; letter-spacing:.06em; text-transform:uppercase; margin:0}
 .m-sensors .n{font-size:1.05em; color:var(--ink-3); letter-spacing:.05em}
 .m-sensors .stale{font-size:1em; color:var(--due)}
-.m-sensors .row{display:flex; align-items:baseline; gap:.7em; padding:.28em 0 .28em .6em; border-left:.22em solid var(--ink-3); border-bottom:1px solid var(--line)}
+.m-sensors .row{display:flex; align-items:baseline; gap:.7em; padding:.28em .2em .28em .6em; border-left:.22em solid var(--ink-3); border-bottom:1px solid var(--line)}
 .m-sensors .row:last-child{border-bottom:0}
 .m-sensors .nm{flex:1; min-width:0; font-size:1.35em; font-weight:600}
 .m-sensors .st{font-size:1.25em; font-weight:600; white-space:nowrap; text-align:right; color:var(--ink-2)}
@@ -197,6 +197,22 @@ body{
       .then(function(r){ if(!r.ok) throw new Error(r.status); return r.json(); });
   }
   function opt(mod, key, dflt){ var o = mod.opts || {}; return o[key] === undefined ? dflt : o[key]; }
+  /* Shrink a module's text until its content fits its box, and no further.
+     Text that wraps makes height jump as the size changes, so one proportional
+     step can land far too small; this homes in on the largest size that fits. */
+  function fitText(el){
+    el.style.fontSize = "";
+    var room = el.clientHeight, wide = el.clientWidth;
+    if(room <= 0 || (el.scrollHeight <= room + 1 && el.scrollWidth <= wide + 1)) return;
+    var size = function(k){ el.style.fontSize = "calc(var(--u, 10px) * var(--f, 1) * " + k.toFixed(3) + ")"; };
+    var lo = 0.1, hi = 1;
+    for(var i = 0; i < 8; i++){
+      var mid = (lo + hi) / 2;
+      size(mid);
+      if(el.scrollHeight <= room + 1 && el.scrollWidth <= wide + 1) lo = mid; else hi = mid;
+    }
+    size(lo);
+  }
   var notes = {};
   function note(key, text){
     if(text) notes[key] = text; else delete notes[key];
@@ -401,10 +417,7 @@ body{
     var age = Math.round((now - parseDay(c.generated)) / 86400000);
     el.innerHTML = '<div class="hd"><h2>Chore Factory</h2><span class="n">' + (n ? n + (n === 1 ? " job" : " jobs") + " · next " + horizon + " days" : "all clear") +
       '</span>' + (age > horizon ? '<span class="stale">list is ' + age + ' days old</span>' : "") + '</div><div class="rows">' + out + '</div>';
-    /* A job that falls off the bottom is a job nobody sees: shrink to fit. */
-    el.style.fontSize = "";
-    var inner = el.scrollHeight, room = el.clientHeight;
-    if(room > 0 && inner > room + 1) el.style.fontSize = "calc(var(--u, 10px) * var(--f, 1) * " + (room / inner * 0.98).toFixed(3) + ")";
+    fitText(el);                 /* something off the bottom is something nobody sees */
   }};
 
   /* Sensors: water detectors and doors, as last reported by the SmartThings
@@ -465,9 +478,7 @@ body{
                  '<b>' + esc(r.name) + '</b><small>' + esc(r.state) + (t ? ' since ' + t : "") + '</small></div>'; }).join("") + '</div>'
         : PREVIEW ? '<div class="quiet">Symbols: nothing open or wet right now</div>' : "") +
         (quiet ? '<div class="symnote">sensors last heard ' + whenText(d.at) + '</div>' : "");
-      el.style.fontSize = "";
-      var tall = el.scrollHeight, space = el.clientHeight;
-      if(space > 0 && tall > space + 1) el.style.fontSize = "calc(var(--u, 10px) * var(--f, 1) * " + (space / tall * 0.98).toFixed(3) + ")";
+      fitText(el);
       return;
     }
     var showBattery = opt(m, "battery", true);
@@ -484,9 +495,7 @@ body{
     var title = String(opt(m, "title", "Sensors") || "");
     el.innerHTML = '<div class="hd">' + (title ? '<h2>' + esc(title) + '</h2>' : "") + '<span class="n">' + summary + '</span>' +
       (quiet ? '<span class="stale">last heard ' + whenText(d.at) + '</span>' : "") + '</div><div class="rows">' + out + '</div>';
-    el.style.fontSize = "";
-    var inner = el.scrollHeight, room = el.clientHeight;      /* a sensor off the bottom is a sensor nobody sees */
-    if(room > 0 && inner > room + 1) el.style.fontSize = "calc(var(--u, 10px) * var(--f, 1) * " + (room / inner * 0.98).toFixed(3) + ")";
+    fitText(el);                 /* something off the bottom is something nobody sees */
   }};
 
   /* Photos: an album fetched by the calendar job (the list arrives locked,
@@ -588,9 +597,7 @@ body{
     else { n = -days; unit = (n === 1 ? "day" : "days") + " ago"; }
     el.innerHTML = (label ? '<div class="label">' + esc(label) + '</div>' : "") +
       '<div class="well"><div class="num">' + n + '</div>' + (unit ? '<div class="unit">' + unit + '</div>' : "") + '</div>';
-    el.style.fontSize = "";
-    var inner = el.scrollHeight, room = el.clientHeight;      /* a long name in a small box: shrink to fit */
-    if(room > 0 && inner > room + 1) el.style.fontSize = "calc(var(--u, 10px) * var(--f, 1) * " + (room / inner * 0.96).toFixed(3) + ")";
+    fitText(el);                 /* a long name in a small box: shrink to fit */
   }};
 
   /* Scores and next games for chosen teams, from ESPN's public schedule feed. */
@@ -619,9 +626,7 @@ body{
       return '<div class="team">' + (t.logo ? '<img class="logo" alt="" src="' + esc(t.logo) + '">' : '<span class="logo"></span>') +
              '<div class="nm">' + esc(t.name) + (t.record ? '<small>' + esc(t.record) + '</small>' : "") + '</div>' + right + last + '</div>';
     }).join("") : '<div class="quiet">No games coming up.</div>';
-    el.style.fontSize = "";
-    var inner = el.scrollHeight, room = el.clientHeight;      /* too many teams for the box: shrink to fit */
-    if(room > 0 && inner > room + 1) el.style.fontSize = "calc(var(--u, 10px) * var(--f, 1) * " + (room / inner * 0.98).toFixed(3) + ")";
+    fitText(el);                 /* something off the bottom is something nobody sees */
   }};
 
   /* A picture from a web address, fetched again every few minutes: a radar
