@@ -171,6 +171,30 @@ body{
 .m-radar.round{border-radius:.7em}
 .m-radar img{width:100%; height:100%; display:block}
 .m-radar .quiet{position:absolute; left:1em; top:1em}
+.m-planes{display:flex; flex-direction:column; color:var(--ink); padding:.6em .8em}
+.m-planes.round{border-radius:.7em}
+.m-planes .hd{display:flex; align-items:baseline; gap:.7em; border-bottom:2px solid var(--line-2); padding-bottom:.25em; margin-bottom:.3em; flex:none}
+.m-planes h2{margin:0; font-size:1.5em; font-weight:600; white-space:nowrap}
+.m-planes .hd .n{font-size:1.05em; color:var(--ink-3); letter-spacing:.04em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.m-planes .smp{flex:none; font-size:.85em; color:var(--due); text-align:right; margin-top:.2em}
+.m-planes .body{flex:1; min-height:0; display:flex; gap:.8em}
+.m-planes.tall .body{flex-direction:column}
+.m-planes .plot{flex:1; min-width:0; min-height:0; position:relative}
+.m-planes .plot svg{position:absolute; inset:0; width:100%; height:100%; overflow:visible}
+.m-planes .ring{fill:none; stroke:var(--ink-3); stroke-opacity:.45}
+.m-planes .ringlab{fill:var(--ink-3); font-size:.85px}
+.m-planes .home{fill:var(--accent)}
+.m-planes .pl{fill:var(--warm)}
+.m-planes .pl.far{fill-opacity:.55}
+.m-planes .lab{fill:var(--ink-2); font-size:1.05px; font-weight:500}
+.m-planes .lab.near{fill:var(--ink); font-weight:600}
+.m-planes .list{flex:none; display:flex; flex-direction:column; justify-content:center; gap:.35em; min-width:0}
+.m-planes .side .list{width:47%}
+.m-planes .row{border-left:.22em solid var(--warm); padding:.15em 0 .15em .55em}
+.m-planes .row b{display:block; font-size:1.25em; font-weight:600; line-height:1.15; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.m-planes .row b span{font-weight:400; color:var(--ink-2)}
+.m-planes .row small{display:block; font-size:.95em; color:var(--ink-3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums}
+.m-planes .none{font-size:1.3em; color:var(--ink-3); margin:auto}
 </style>
 </head>
 <body>
@@ -728,6 +752,136 @@ body{
       } else if(Date.now() - (rec.at || 0) > every && Date.now() - (rec.asked || 0) > MIN) reload();
     },
     unmount:function(el, m, rec){ clearInterval(rec.timer); }
+  };
+
+  /* ===================================================== planes ==== */
+  /* Planes overhead, from the free ADS-B feeds (adsb.fi, then adsb.lol). Those
+     feeds do not answer web pages from other sites, so on the TV the Glance app
+     fetches them for the page; anywhere else (the Manager's preview, a laptop)
+     the module shows made-up sample planes and says so. Only a rounded point
+     (about a kilometer) goes to the feed; distances are worked out here.
+     It asks only while its screen is showing, and moves each plane along its
+     heading between asks so the picture does not jump. */
+  var KT_MPH = 1.15078, ROUTES = {}, routesAsked = 0;
+  var PLANE = "M0-1.1L.16-.35L1-.05V.15L.16-.02L.12.62L.38.85V1L0 .9L-.38 1V.85L-.12.62L-.16-.02L-1 .15V-.05L-.16-.35Z";
+  var PLANE_TYPES = {A319:"A319", A320:"A320", A321:"A321", A20N:"A320neo", A21N:"A321neo", A332:"A330", A333:"A330", A359:"A350",
+    B712:"717", B737:"737", B738:"737-800", B739:"737-900", B38M:"737 MAX 8", B39M:"737 MAX 9", B752:"757", B753:"757-300", B763:"767",
+    B772:"777", B77W:"777-300ER", B788:"787-8", B789:"787-9", B78X:"787-10", B744:"747", B748:"747-8", CRJ2:"CRJ-200", CRJ7:"CRJ-700",
+    CRJ9:"CRJ-900", E170:"E170", E75L:"E175", E75S:"E175", E190:"E190", BCS1:"A220-100", BCS3:"A220-300", MD11:"MD-11",
+    C172:"Cessna 172", C182:"Cessna 182", C208:"Cessna Caravan", PA28:"Piper Cherokee", SR22:"Cirrus SR22", PC12:"Pilatus PC-12",
+    BE20:"King Air", B06:"Bell 206 helicopter", EC35:"EC135 helicopter", AS50:"AStar helicopter"};
+  var AIRLINES = {AAL:"American", DAL:"Delta", UAL:"United", SWA:"Southwest", ASA:"Alaska", JBU:"JetBlue", FFT:"Frontier", NKS:"Spirit",
+    SCX:"Sun Country", SKW:"SkyWest", ENY:"Envoy", RPA:"Republic", EDV:"Endeavor", JIA:"PSA", FDX:"FedEx", UPS:"UPS", AAY:"Allegiant",
+    ACA:"Air Canada", WJA:"WestJet", GJS:"GoJet", ASH:"Mesa", AWI:"Air Wisconsin", CPZ:"Compass", QXE:"Horizon"};
+  function titleCase(t){ return String(t).toLowerCase().replace(/\b[a-z]/g, function(c){ return c.toUpperCase(); }); }
+  function planeType(a){
+    if(PLANE_TYPES[a.t]) return PLANE_TYPES[a.t];
+    if(a.desc) return titleCase(a.desc).replace(/^(Boeing|Airbus) /, "");
+    return a.t || "";
+  }
+  function flightName(a){
+    var f = String(a.flight || "").trim(), m = /^([A-Z]{3})(\d{1,4}[A-Z]?)$/.exec(f);
+    if(m && AIRLINES[m[1]]) return AIRLINES[m[1]] + " " + m[2];
+    return f || String(a.r || "").trim() || "Unknown";
+  }
+  /* Where a flight is going, from adsbdb (it answers web pages directly).
+     Each callsign is asked once; misses are remembered too. */
+  function askRoute(cs, then){
+    if(!/^[A-Z]{3}\d{1,4}[A-Z]?$/.test(cs) || ROUTES[cs] !== undefined) return;
+    if(Date.now() - routesAsked < 1500) return;          /* gently, one at a time */
+    routesAsked = Date.now(); ROUTES[cs] = null;
+    fetch("https://api.adsbdb.com/v0/callsign/" + cs).then(function(r){ return r.ok ? r.json() : null; }).then(function(j){
+      var fr = j && j.response && j.response.flightroute;
+      if(fr && fr.origin && fr.destination){ ROUTES[cs] = (fr.origin.iata_code || fr.origin.icao_code) + " → " + (fr.destination.iata_code || fr.destination.icao_code); then(); }
+    }).catch(function(){});
+  }
+  function compass(deg){ return ["N","NE","E","SE","S","SW","W","NW"][Math.round(((deg % 360) + 360) % 360 / 45) % 8]; }
+  /* Made-up planes for where the feeds cannot be reached. */
+  function samplePlanes(lat, lon){
+    var k = Math.cos(lat * Math.PI / 180), now = Date.now() / 1000;
+    return [[2.5, 40, 4300, 210, 250, "SWA2384", "B38M"], [6.2, 300, 11200, 330, 420, "UAL1380", "A320"], [8.1, 170, 2100, 95, 120, "N13NN", "B06"],
+            [4.8, 120, 31000, 260, 470, "DAL1427", "B739"], [9.3, 230, 7600, 50, 300, "SKW5812", "CRJ9"]].map(function(x, i){
+      var b = x[1] * Math.PI / 180, mi = x[0];
+      return {hex:"s" + i, flight:x[5], t:x[6], alt_baro:x[2], track:x[3], gs:x[4] / KT_MPH,
+              lat:lat + mi * Math.cos(b) / 69.05, lon:lon + mi * Math.sin(b) / (69.17 * k), seen_pos:0, _at:now};
+    });
+  }
+  function loadPlanes(rec, lat, lon, nm){
+    rec.asked = Date.now();
+    var la = lat.toFixed(2), lo = lon.toFixed(2), r = Math.max(1, Math.min(40, Math.round(nm)));
+    var got = function(list){ return function(j){ if(!j || !Array.isArray(j[list])) throw new Error("no list"); return j[list]; }; };
+    getJSON("https://opendata.adsb.fi/api/v2/lat/" + la + "/lon/" + lo + "/dist/" + r, true).then(got("aircraft"))
+      .catch(function(){ return getJSON("https://api.adsb.lol/v2/point/" + la + "/" + lo + "/" + r, true).then(got("ac")); })
+      .then(function(ac){ rec.planes = ac; rec.at = Date.now(); rec.live = true; rec.sample = false; drawOne(rec); })
+      .catch(function(){ rec.fails = (rec.fails || 0) + 1; if(!rec.live || Date.now() - rec.at > 5 * MIN){ rec.live = false; rec.sample = true; } drawOne(rec); });
+  }
+  KINDS.planes = { every:3000,
+    mount:function(el, m, rec){ rec.planes = null; rec.at = 0; rec.asked = 0; },
+    draw:function(el, m, rec){
+      var c = DATA.cal, home = c && c.lat != null ? [c.lat, c.lon] : PREVIEW ? [45, -94] : null;
+      el.classList.toggle("round", opt(m, "round", true));
+      if(!home){ el.innerHTML = '<div class="quiet">Planes: waiting for the location</div>'; return; }
+      var miles = Math.max(1, Math.min(40, +opt(m, "miles", 10) || 10)), every = Math.max(30, +opt(m, "seconds", 45) || 45) * 1000;
+      if(Date.now() - rec.asked > every && !(rec.fails > 3 && Date.now() - rec.asked < 5 * MIN)) loadPlanes(rec, home[0], home[1], miles / KT_MPH * 1.05);
+      if(rec.live) rec.fails = 0;
+      var raw = rec.sample || (!rec.planes && PREVIEW) ? samplePlanes(home[0], home[1]) : rec.planes;
+      var title = String(opt(m, "title", "Planes overhead") || ""), look = opt(m, "look", "both");
+      var head = function(n){ return title ? '<div class="hd"><h2>' + esc(title) + '</h2>' + (n ? '<span class="n">' + n + '</span>' : "") + '</div>' : ""; };
+      var foot = rec.sample || (!rec.planes && PREVIEW) ? '<div class="smp">Sample planes' + (PREVIEW ? "" : ": live ones need the Glance TV app") + '</div>' : "";
+      if(!raw){ el.innerHTML = head("") + '<div class="none">Looking for planes…</div>'; return; }
+      /* Where each plane is now: its last report, carried forward along its
+         heading at its speed (at most two minutes, in case reports stop). */
+      var k = Math.cos(home[0] * Math.PI / 180), ground = opt(m, "ground", false), under = +opt(m, "under", 0) || 0, nowS = Date.now() / 1000;
+      var fetchedS = (rec.at || Date.now()) / 1000;
+      var list = raw.filter(function(a){ return a.lat != null && a.lon != null; }).map(function(a){
+        var onGround = a.alt_baro === "ground", alt = onGround ? 0 : +a.alt_baro || +a.alt_geom || 0;
+        var age = Math.min(120, (a._at ? nowS - a._at : nowS - fetchedS) + (+a.seen_pos || 0)), mph = (+a.gs || 0) * KT_MPH, tr = (+a.track || +a.true_heading || 0);
+        var y = (a.lat - home[0]) * 69.05, x = (a.lon - home[1]) * 69.17 * k;
+        if(!onGround && mph > 30){ x += Math.sin(tr * Math.PI / 180) * mph * age / 3600; y += Math.cos(tr * Math.PI / 180) * mph * age / 3600; }
+        return {a:a, x:x, y:y, d:Math.sqrt(x * x + y * y), ground:onGround, alt:alt, mph:mph, track:tr,
+                bear:(Math.atan2(x, y) * 180 / Math.PI + 360) % 360, cs:String(a.flight || "").trim()};
+      }).filter(function(p){ return p.d <= miles && (ground || !p.ground) && (!under || p.alt <= under); });
+      list.sort(function(p, q){ return p.d - q.d; });
+      var routes = opt(m, "routes", true) && !rec.sample;
+      if(routes) list.slice(0, 4).forEach(function(p){ askRoute(p.cs, function(){ drawOne(rec); }); });
+      var count = list.length + (list.length === 1 ? " plane" : " planes") + " within " + miles + " mi";
+      if(!list.length){ el.innerHTML = head("") + '<div class="none">No planes within ' + miles + (miles === 1 ? ' mile' : ' miles') + '</div>' + foot; return; }
+      function line(p){
+        var rt = routes && ROUTES[p.cs] ? ' <span>' + esc(ROUTES[p.cs]) + '</span>' : "";
+        /* Two short lines fit a radar-sized box: what it is and how far away, then how high and how fast. */
+        var one = [planeType(p.a), p.d < 0.5 ? "overhead" : p.d.toFixed(p.d < 10 ? 1 : 0) + " mi " + compass(p.bear)].filter(Boolean);
+        var two = [p.ground ? "on the ground" : p.alt.toLocaleString("en-US") + " ft", Math.round(p.mph) + " mph"];
+        return '<div class="row"><b>' + esc(flightName(p.a)) + rt + '</b><small>' + esc(one.join(" · ")) + '</small><small>' + esc(two.join(" · ")) + '</small></div>';
+      }
+      var wantPlot = look !== "list", wantList = look !== "plot";
+      var plot = "";
+      if(wantPlot){
+        /* North up, the house in the middle, rings at a third and two thirds of the range and at its edge. */
+        var R = 10, sc = R / miles, rings = opt(m, "rings", true), g = "";
+        if(rings) [1/3, 2/3, 1].forEach(function(f){
+          g += '<circle class="ring" cx="0" cy="0" r="' + (R * f).toFixed(2) + '" stroke-width="' + (f === 1 ? .09 : .06) + '"/>';
+          if(f < 1) g += '<text class="ringlab" x="' + (R * f * .71 + .2).toFixed(2) + '" y="' + (-R * f * .71 - .2).toFixed(2) + '">' + Math.round(miles * f) + '</text>';
+        });
+        g += '<circle class="home" cx="0" cy="0" r=".32"/>';
+        var labels = opt(m, "labels", true);
+        list.slice().reverse().forEach(function(p, i){
+          var near = p === list[0], px = p.x * sc, py = -p.y * sc, size = near ? .95 : .78;
+          g += '<path class="pl' + (p.d > miles * 0.8 ? " far" : "") + '" d="' + PLANE + '" transform="translate(' + px.toFixed(2) + ' ' + py.toFixed(2) + ') rotate(' + Math.round(p.track) + ') scale(' + size + ')"/>';
+          if(labels && (near || list.length <= 6 || list.indexOf(p) < 6)){
+            var left = px > R * .45;
+            g += '<text class="lab' + (near ? " near" : "") + '" x="' + (px + (left ? -1.25 : 1.25)).toFixed(2) + '" y="' + (py + .38).toFixed(2) + '"' + (left ? ' text-anchor="end"' : "") + '>' +
+                 esc(p.cs || p.a.r || "") + (p.ground ? "" : " " + Math.round(p.alt / 100) * 100 / 1000 + "k") + '</text>';
+          }
+        });
+        plot = '<div class="plot"><svg viewBox="-11 -11 22 22" preserveAspectRatio="xMidYMid meet" aria-hidden="true">' + g + '</svg></div>';
+      }
+      /* Side by side when the box is wide, the list under the plot when it is tall. */
+      var wide = el.clientWidth > el.clientHeight * 1.25, n = Math.max(1, +opt(m, "count", 3) || 3);
+      var rows = wantList ? '<div class="list">' + list.slice(0, wantPlot ? (wide ? n : Math.min(n, 2)) : n).map(line).join("") + '</div>' : "";
+      el.innerHTML = head(count) + '<div class="body ' + (wide ? "side" : "") + '">' + plot + rows + '</div>' + foot;
+      el.classList.toggle("tall", !wide);
+    },
+    unmount:function(){}
   };
 
   /* ========================================================== fonts ==== */
