@@ -258,36 +258,24 @@ body{
                    (opt(m, "showTime", true) ? '<div class="time">' + t + ampm + '</div>' : "");
   }};
 
-  /* Weather pictures are drawn here, not downloaded, so there is no icon set to go missing.
+  /* Weather pictures are drawn here (see dayIcon), not downloaded, so there is no icon set to go missing.
      code: 0 clear, 2 partly cloudy, 3 cloudy, 45 fog, 61 rain, 71 snow, 95 storm. */
-  function icon(code, night){
-    var sun = '<circle cx="24" cy="24" r="9" fill="currentColor"/><g stroke="currentColor" stroke-width="3" stroke-linecap="round">' +
-      '<path d="M24 5v6M24 37v6M5 24h6M37 24h6M10.6 10.6l4.2 4.2M33.2 33.2l4.2 4.2M10.6 37.4l4.2-4.2M33.2 14.8l4.2-4.2"/></g>';
-    var moon = '<path d="M30 8a16 16 0 1 0 10 28A18 18 0 0 1 30 8z" fill="currentColor"/>';
-    var cloud = function(y){ return '<path transform="translate(0 ' + y + ')" d="M14 34a8 8 0 0 1 .9-15.9A11 11 0 0 1 36 20.5 7 7 0 0 1 35 34z" fill="currentColor"/>'; };
-    var smallSun = '<g transform="translate(-6 -8) scale(.62)" opacity=".95">' + (night ? moon : sun) + '</g>';
-    var drops = '<g stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M17 38l-2 6M25 38l-2 6M33 38l-2 6"/></g>';
-    var flakes = '<g fill="currentColor"><circle cx="16" cy="41" r="2.2"/><circle cx="24" cy="44" r="2.2"/><circle cx="32" cy="41" r="2.2"/></g>';
-    var bolt = '<path d="M25 34l-6 8h5l-2 6 7-9h-5z" fill="currentColor"/>';
-    var fog = '<g stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M9 36h30M13 42h22"/></g>';
-    var body;
-    if(code === 0) body = night ? moon : sun;
-    else if(code <= 2) body = smallSun + cloud(2);
-    else if(code === 3) body = cloud(0);
-    else if(code <= 48) body = cloud(-6) + fog;
-    else if(code <= 67 || (code >= 80 && code <= 82)) body = cloud(-6) + drops;
-    else if(code <= 77 || code === 85 || code === 86) body = cloud(-6) + flakes;
-    else body = cloud(-6) + bolt;
-    return '<svg viewBox="0 0 48 48" aria-hidden="true">' + body + '</svg>';
-  }
   var COMPASS = ["N","NE","E","SE","S","SW","W","NW"];
   function num(v){ return v == null || isNaN(v) ? "–" : Math.round(v); }
 
+  /* Light, moderate or heavy, read from the condition code (drizzle, rain, showers, snow). */
+  var NOW_STRENGTH = {51:.15, 53:.25, 55:.35, 56:.2, 57:.35, 61:.4, 63:.65, 65:.95, 66:.4, 67:.8, 80:.4, 81:.65, 82:.95,
+                      71:.3, 73:.55, 75:.9, 77:.3, 85:.4, 86:.8, 95:1, 96:1, 99:1};
   KINDS.weather = { draw:function(el, m){
     el.classList.toggle("framed", opt(m, "frame", true));
     var w = DATA.wx;
     if(!w){ el.innerHTML = '<div class="quiet">' + (DATA.wxWhy || "Weather loading") + '</div>'; return; }
-    el.innerHTML = '<div class="big">' + num(w.now.temp) + '°' + icon(w.now.code, w.now.night) + '</div>' +
+    /* The same picture as the forecast. "Now" has no chance or inches, so how
+       hard it is raining or snowing comes from the condition itself. */
+    var plain = /^#[0-9a-f]{6}$/i.test(m.color || "") || !opt(m, "rainBlue", true);
+    var pic = dayIcon({code:w.now.code, pop:null, amt:0, hi:w.now.temp, cloud:null, night:w.now.night,
+                       t:NOW_STRENGTH[w.now.code] == null ? 0.45 : NOW_STRENGTH[w.now.code]}, plain);
+    el.innerHTML = '<div class="big">' + num(w.now.temp) + '°' + pic.svg + '</div>' +
       (opt(m, "feels", true) ? '<div class="feels">Feels like ' + num(w.now.feels) + '</div>' : "") +
       (opt(m, "wind", true) ? '<div class="wind">' + num(w.now.wind) + ' mph ' + (w.now.dir || "") + ' wind</div>' : "") +
       (opt(m, "place", true) && w.place ? '<div class="where">' + esc(w.place) + '</div>' : "");
@@ -326,18 +314,18 @@ body{
     var wetCode = code >= 51;                                     /* drizzle, rain, snow, showers, storms */
     var wet = d.pop != null ? (d.pop >= 5 || amt >= 0.01) : wetCode;
     if(wet && !wetCode && d.hi != null && d.hi <= 33) snowy = true;   /* a chance of something on a freezing day is snow */
-    var t = Math.max(0, Math.min(1, 0.55 * (d.pop == null ? 50 : d.pop) / 100 + 0.45 * Math.min(1, amt / 0.75)));
+    var t = d.t != null ? d.t : Math.max(0, Math.min(1, 0.55 * (d.pop == null ? 50 : d.pop) / 100 + 0.45 * Math.min(1, amt / 0.75)));
     var sunny = code <= 2 || (d.cloud != null && d.cloud < 60);
     var one = "currentColor", blue = plain ? one : ramp(RAIN_BLUE, t), warm = plain ? one : "var(--warm)";
-    var body = "";
-    if(!wet && code === 0){                                       /* a clear day: the whole sun */
-      body = '<g transform="translate(0 -2)" fill="' + warm + '" stroke="' + warm + '"><circle cx="24" cy="24" r="9" stroke="none"/><g stroke-width="3" stroke-linecap="round">' +
-        '<path d="M24 5v6M24 37v6M5 24h6M37 24h6M10.6 10.6l4.2 4.2M33.2 33.2l4.2 4.2M10.6 37.4l4.2-4.2M33.2 14.8l4.2-4.2"/></g></g>';
+    var body = "", moon = '<path d="M30 8a16 16 0 1 0 10 28A18 18 0 0 1 30 8z" stroke="none"/>';
+    if(!wet && code === 0){                                       /* clear: the whole sun, or the moon at night */
+      body = '<g transform="translate(0 -2)" fill="' + warm + '" stroke="' + warm + '">' + (d.night ? moon : '<circle cx="24" cy="24" r="9" stroke="none"/><g stroke-width="3" stroke-linecap="round">' +
+        '<path d="M24 5v6M24 37v6M5 24h6M37 24h6M10.6 10.6l4.2 4.2M33.2 33.2l4.2 4.2M10.6 37.4l4.2-4.2M33.2 14.8l4.2-4.2"/></g>') + '</g>';
       return {svg:'<svg viewBox="0 0 48 44" aria-hidden="true">' + body + '</svg>', color:""};
     }
-    if(sunny && !(wet && t >= 0.6) && !stormy)                     /* the sun, peeking over the cloud's shoulder */
-      body += '<g transform="translate(-2 -2) scale(.62)" fill="' + warm + '" stroke="' + warm + '"><circle cx="24" cy="24" r="9" stroke="none"/>' +
-        '<g stroke-width="3" stroke-linecap="round"><path d="M24 5v6M5 24h6M10.6 10.6l4.2 4.2M10.6 37.4l4.2-4.2M33.2 14.8l4.2-4.2"/></g></g>';
+    if(sunny && !(wet && t >= 0.6) && !stormy)                     /* the sun (or moon), peeking over the cloud's shoulder */
+      body += '<g transform="translate(-2 -2) scale(.62)" fill="' + warm + '" stroke="' + warm + '">' + (d.night ? moon : '<circle cx="24" cy="24" r="9" stroke="none"/>' +
+        '<g stroke-width="3" stroke-linecap="round"><path d="M24 5v6M5 24h6M10.6 10.6l4.2 4.2M10.6 37.4l4.2-4.2M33.2 14.8l4.2-4.2"/></g>') + '</g>';
     var gray = plain ? one : stormy ? "rgb(96,108,124)" : wet ? ramp(RAIN_GRAY, t) : "rgb(201,209,216)";
     body += '<path d="M14 34a8 8 0 0 1 .9-15.9A11 11 0 0 1 36 20.5 7 7 0 0 1 35 34z" fill="' + gray + '"/>';
     var count = t < 0.25 ? 1 : t < 0.6 ? 2 : 3, xs = count === 1 ? [25] : count === 2 ? [21, 30] : [17, 25, 33];
@@ -480,9 +468,12 @@ body{
              '</div></div><div class="when">' + when + '<span>' + MON[d.getMonth()] + " " + d.getDate() + '</span></div></div>';
     });
     if(!n) out = '<div class="none">Nothing due in the next ' + horizon + ' days.</div>';
+    /* An old date means a stale list only for a feed written by an occasional
+       sync. A live feed ("live": true) is rewritten on every edit, so its date
+       is just the last edit, and a quiet fortnight is not a problem. */
     var age = Math.round((now - parseDay(c.generated)) / 86400000);
     el.innerHTML = '<div class="hd"><h2>Chore Factory</h2><span class="n">' + (n ? n + (n === 1 ? " job" : " jobs") + " · next " + horizon + " days" : "all clear") +
-      '</span>' + (age > horizon ? '<span class="stale">list is ' + age + ' days old</span>' : "") + '</div><div class="rows">' + out + '</div>';
+      '</span>' + (age > horizon && !c.live ? '<span class="stale">list is ' + age + ' days old</span>' : "") + '</div><div class="rows">' + out + '</div>';
     fitText(el);                 /* something off the bottom is something nobody sees */
   }};
 
@@ -599,8 +590,14 @@ body{
         q.textContent = PREVIEW ? "Photos: none to show yet" : "";
       } else if(q) el.removeChild(q);
       if(sig !== rec.sig){ rec.sig = sig; KINDS.photos.next(el, m, rec); }
-      clearInterval(rec.timer);
-      rec.timer = setInterval(function(){ KINDS.photos.next(el, m, rec); }, Math.max(2, +opt(m, "seconds", 5) || 5) * 1000);
+      /* Started once per pace, not on every draw: draw() runs each time the
+         screen comes round, which would otherwise hold back any picture whose
+         time is longer than the screen's. */
+      var pace = Math.max(2, +opt(m, "seconds", 5) || 5) * 1000;
+      if(pace !== rec.pace){
+        rec.pace = pace; clearInterval(rec.timer);
+        rec.timer = setInterval(function(){ KINDS.photos.next(el, m, rec); }, pace);
+      }
     },
     next:function(el, m, rec){
       if(!rec.list || !rec.list.length || !el.isConnected) return;
@@ -699,25 +696,36 @@ body{
   /* A picture from a web address, fetched again every few minutes: a radar
      loop, a webcam, a chart. An animated picture plays as it comes. */
   KINDS.radar = {
-    mount:function(el, m, rec){ el.innerHTML = '<img alt="">'; rec.url = ""; },
+    mount:function(el, m, rec){ el.innerHTML = '<img alt="">'; rec.url = ""; rec.key = ""; },
     draw:function(el, m, rec){
       var img = el.querySelector("img"), url = String(opt(m, "url", "") || "").trim(), q = el.querySelector(".quiet");
       el.classList.toggle("round", opt(m, "round", true));
       img.style.objectFit = opt(m, "fit", "contain");
       if(q) el.removeChild(q);
       if(!/^https:\/\//.test(url)){
-        img.removeAttribute("src"); rec.url = "";
+        img.removeAttribute("src"); rec.url = ""; rec.key = ""; clearInterval(rec.timer);
         if(PREVIEW){ q = document.createElement("div"); q.className = "quiet"; q.textContent = "Picture: paste a web address (https://…)"; el.appendChild(q); }
         return;
       }
+      var every = Math.max(1, +opt(m, "minutes", 10) || 10) * MIN;
       function reload(){
         var pre = new Image();
-        pre.onload = function(){ img.src = pre.src; };       /* a failed fetch leaves the last picture up */
+        rec.asked = Date.now();
+        pre.onload = function(){ img.src = pre.src; rec.at = Date.now(); };   /* a failed fetch leaves the last picture up */
         pre.src = fresh(url);
       }
-      if(url !== rec.url){ rec.url = url; reload(); }
-      clearInterval(rec.timer);
-      rec.timer = setInterval(reload, Math.max(1, +opt(m, "minutes", 10) || 10) * MIN);
+      /* draw() runs every time this screen comes round in the loop, so the
+         timer is started only when the address or the interval changes; a
+         restart on every draw would mean it never fired. A picture older than
+         its interval (the TV slept, a fetch failed) is fetched again now,
+         at most once a minute. */
+      var key = url + "|" + every;
+      if(key !== rec.key){
+        rec.key = key; rec.url = url;
+        clearInterval(rec.timer);
+        rec.timer = setInterval(reload, every);
+        reload();
+      } else if(Date.now() - (rec.at || 0) > every && Date.now() - (rec.asked || 0) > MIN) reload();
     },
     unmount:function(el, m, rec){ clearInterval(rec.timer); }
   };
@@ -1149,7 +1157,9 @@ body{
   function loadChores(){
     if(!CONFIG.nextUpFeed) return;
     getJSON(CONFIG.nextUpFeed).then(function(j){
-      if(j && j.tasks && j.tasks.length){ DATA.chores = j; drawKind("nextup"); }
+      /* A live feed may truly have nothing left on it; an empty list from the
+         old sync more likely means a failed one, so that keeps the last list. */
+      if(j && Array.isArray(j.tasks) && (j.tasks.length || j.live)){ DATA.chores = j; drawKind("nextup"); }
     }).catch(function(){});
   }
 
@@ -1172,6 +1182,7 @@ body{
   /* ========================================================== start ==== */
   function useConfig(c){
     var wasSource = CONFIG ? JSON.stringify(CONFIG.weather || {}) : undefined;
+    var wasFeed = CONFIG ? CONFIG.nextUpFeed || "" : undefined;
     CONFIG = c || {};
     CONFIG.screens = CONFIG.screens || []; CONFIG.devices = CONFIG.devices || [];
     pickDevice(hash.device);
@@ -1179,6 +1190,7 @@ body{
     note("layout", CONFIG.screens.length || PREVIEW ? "" : hash.k ? "No layout has been published yet."
                                                                : "This display needs its full address: the key is missing from it.");
     if(wasSource !== undefined && JSON.stringify(CONFIG.weather || {}) !== wasSource){ DATA.wx = null; drawKind("weather", "forecast"); loadWeather(); }
+    if(wasFeed !== undefined && (CONFIG.nextUpFeed || "") !== wasFeed){ DATA.chores = null; drawKind("nextup"); loadChores(); }   /* the chores moved */
     loadSports();
     if(!DATA.sensors) loadSensors();
   }
