@@ -128,21 +128,29 @@ def detail(g, d, tz, sleep_raw):
         return (datetime.datetime.fromtimestamp(ms / 1000.0, tz) - midnight).total_seconds() / 60.0
 
     out = {}
-    try:
-        bb = g.get_body_battery(d) or []
-        e = bb[0] if isinstance(bb, list) and bb else {}
+    def levels(arr):
         pts = []
-        for x in e.get("bodyBatteryValuesArray") or []:
+        for x in arr or []:
             if isinstance(x, list) and len(x) >= 2 and isinstance(x[0], (int, float)):
                 lvl = x[2] if len(x) >= 4 else x[1]
                 if isinstance(lvl, (int, float)):
                     pts.append([mins(x[0]), lvl])
-        out["bbc"] = thin(pts)
+        return pts
+
+    try:
+        bb = g.get_body_battery(d) or []
+        e = bb[0] if isinstance(bb, list) and bb else {}
+        out["bbc"] = thin(levels(e.get("bodyBatteryValuesArray")))
         out["charged"], out["drained"] = e.get("charged"), e.get("drained")
     except Exception:
         pass
     try:
         st = g.get_stress_data(d) or {}
+        # The stress answer carries body battery every few minutes; the body
+        # battery answer has only a handful of points. Use whichever has more.
+        dense = thin(levels(st.get("bodyBatteryValuesArray")))
+        if len(dense) > len(out.get("bbc") or []):
+            out["bbc"] = dense
         out["stc"] = thin([[mins(x[0]), x[1]] for x in st.get("stressValuesArray") or []
                            if isinstance(x, list) and len(x) >= 2 and isinstance(x[0], (int, float)) and isinstance(x[1], (int, float))])
         if isinstance(st.get("avgStressLevel"), (int, float)) and st["avgStressLevel"] >= 0:
