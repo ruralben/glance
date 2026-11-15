@@ -2211,7 +2211,8 @@ html.lightlook .mapwrap .credit{color:#3b4855; text-shadow:none}
   /* ================================================ fitness ==== */
   /* Body battery, sleep and steps from the family's Garmin accounts. The
      Manager fetches them and publishes them locked, as fitness.enc beside the
-     layout; the board reads that file every half hour. */
+     layout; the board reads that file every half hour. Sized to be read from
+     across the kitchen: big numbers, few words. */
   var FIT_KINDS = ["fitbattery","fitsleep","fitsteps","fitcompare"];
   function loadFitness(){
     if(PREVIEW || !hash.k || !onLayout(function(m){ return FIT_KINDS.indexOf(m.type) >= 0; })) return;
@@ -2226,63 +2227,75 @@ html.lightlook .mapwrap .credit{color:#3b4855; text-shadow:none}
   }
   function fitDays(m){ return Math.max(1, Math.min(7, +opt(m, "days", 1) || 1)); }
   function lastDays(p, n){ return (p.days || []).slice(0, n).reverse(); }            /* oldest first */
+  function lastSleep(p){ return (p.days || []).filter(function(d){ return d.sleep != null; })[0] || {}; }
   function bbColor(v){ return v == null ? "var(--ink-3)" : v >= 60 ? "#3fbf5f" : v >= 30 ? "#f2c94c" : "#e2564a"; }
+  function sleepColor(v){ return v == null ? "var(--ink-3)" : v >= 80 ? "#7c8cff" : v >= 60 ? "#4da3ff" : "#f2c94c"; }
   function initial(x, y, r, p){ return cC(x, y, r, p.color || "#4da3ff") + cT(x, y + r * .37, (p.name || "?").charAt(0).toUpperCase(), {s:r1(r * 1.05), w:700, c:CK.dark, a:"middle"}); }
-  function dayLetter(d){ return DAYS[parseDay(d).getDay()].charAt(0); }
-  /* Little bars for the past few days under each person. */
-  function minibars(x, y, w, h, vals, max, colorOf, days){
-    var n = vals.length, bw = w / n, b = "";
-    vals.forEach(function(v, i){ var hh = v == null ? 0 : Math.max(2, h * Math.min(1, v / max)), cx = x + bw * i + bw / 2;
-      b += cR(x + bw * i + bw * .18, y + h - hh, bw * .64, hh, colorOf(v), {rx:3}) + cT(cx, y + h + 16, days[i] ? dayLetter(days[i].d) : "", {s:11, c:CK.mut, a:"middle"}); });
+  /* A person's name with their initial, centered over a column. */
+  function nameRow(cx, y, p, size, maxW){ var nm = fitT(p.name, maxW - size * 1.4, size, true), w = nm.length * size * .53 + size * 1.25;
+    return initial(cx - w / 2 + size * .45, y - size * .34, size * .45, p) + cT(cx - w / 2 + size * 1.15, y, nm, {s:size, w:600}); }
+  function title(txt){ return cT(24, 44, txt, {s:30, w:700, c:CK.mut, ls:2}); }
+  function dayLetter(d){ return DAYS[parseDay(d).getDay()].slice(0, 2); }
+  /* Bars for the past few days, with the day under each. */
+  function minibars(x, y, w, h, vals, max, colorOf, days, labelSize){
+    var n = vals.length, bw = w / n, b = "", ls = labelSize || 20;
+    vals.forEach(function(v, i){ var hh = v == null ? 0 : Math.max(3, h * Math.min(1, v / max)), cx = x + bw * i + bw / 2;
+      b += cR(x + bw * i + bw * .15, y + h - hh, bw * .7, hh, colorOf(v), {rx:4}) + cT(cx, y + h + ls + 4, days[i] ? dayLetter(days[i].d) : "", {s:ls, c:CK.mut, a:"middle"}); });
     return b; }
+  /* A shoe print: the sole and five toes. */
+  function footprint(x, y, s, col, flip){
+    var t = 'translate(' + r1(x) + ' ' + r1(y) + ') scale(' + (flip ? -s : s) + ' ' + s + ')';
+    return '<g transform="' + t + '" style="fill:' + col + '"><path d="M-9 4 C-12 -10 -6 -20 2 -20 C10 -20 12 -10 10 0 C8 10 10 18 6 26 C2 32 -8 30 -9 22 C-10 16 -7 12 -9 4 Z"/>' +
+      '<circle cx="-7" cy="-27" r="3.4"/><circle cx="-1" cy="-30" r="3.6"/><circle cx="5" cy="-29" r="3.2"/><circle cx="10" cy="-25" r="2.8"/><circle cx="13" cy="-20" r="2.3"/></g>'; }
 
   KINDS.fitbattery = { every:5 * MIN, draw:function(el, m){
     var ppl = fitPeople(el); if(!ppl) return;
-    var n = ppl.length, cw = 940 / n, nd = fitDays(m), b = cT(20, 34, "BODY BATTERY", {s:14, w:600, c:CK.mut, ls:1.5});
-    ppl.forEach(function(p, i){ var x = 10 + cw * i, cx = x + cw / 2, today = (p.days || [])[0] || {}, v = today.bb, col = bbColor(v), bwid = Math.min(110, cw * .42), top = 92, bh = nd > 1 ? 250 : 330;
-      b += initial(cx, 66, 18, p);
-      b += cT(cx, 108, fitT(p.name, cw - 20, 22, true), {s:22, w:600, a:"middle"});
-      /* the battery: a body, a cap, and the charge rising inside */
-      var bx = cx - bwid / 2, by = top + 36;
-      b += cR(cx - bwid * .18, by - 12, bwid * .36, 14, "var(--line-2)", {rx:4}) + cR(bx, by, bwid, bh, "var(--panel)", {rx:16, st:"var(--line-2)", sw:3});
-      var fill = v == null ? 0 : (bh - 12) * v / 100;
-      b += cR(bx + 6, by + bh - 6 - fill, bwid - 12, fill, col, {rx:11});
-      if(today.bbHigh != null && today.bb != null && today.bb >= today.bbHigh - 2) b += '<path d="M' + r1(cx + 6) + ' ' + r1(by + bh * .3) + ' l-22 34 h16 l-8 30 l26 -40 h-16 z" style="fill:#fff" opacity=".9"/>';
-      b += cT(cx, by + bh + 52, v == null ? "–" : v, {s:48, w:600, a:"middle", c:col});
-      b += cT(cx, by + bh + 78, today.bbHigh != null ? "high " + today.bbHigh + " · low " + today.bbLow : "", {s:15, c:CK.mut, a:"middle"});
-      if(nd > 1){ var ds = lastDays(p, nd); b += minibars(x + 20, 480, cw - 40, 30, ds.map(function(d){ return d.bbHigh; }), 100, bbColor, ds); } });
+    var n = ppl.length, cw = 940 / n, nd = fitDays(m), b = title("BODY BATTERY"), name = Math.min(40, cw * .14);
+    ppl.forEach(function(p, i){ var x = 10 + cw * i, cx = x + cw / 2, today = (p.days || [])[0] || {}, v = today.bb, col = bbColor(v);
+      var bh = nd > 1 ? 210 : 270, bwid = Math.min(170, cw * .5), by = 112;
+      b += nameRow(cx, 96, p, name, cw - 20);
+      b += cR(cx - bwid * .2, by - 14, bwid * .4, 18, "var(--line-2)", {rx:5}) + cR(cx - bwid / 2, by, bwid, bh, "var(--panel)", {rx:20, st:"var(--line-2)", sw:4});
+      var fill = v == null ? 0 : (bh - 16) * v / 100;
+      b += cR(cx - bwid / 2 + 8, by + bh - 8 - fill, bwid - 16, fill, col, {rx:14});
+      if(today.bbHigh != null && v != null && v >= today.bbHigh - 2)
+        b += '<path transform="translate(' + r1(cx) + ' ' + r1(by + bh * .42) + ') scale(' + r1(bh / 200) + ')" d="M8 -46 L-24 6 H-2 L-12 46 L24 -8 H2 Z" style="fill:#fff" opacity=".92"/>';
+      var ny = by + bh + 92;
+      b += cT(cx, ny, v == null ? "–" : v, {s:Math.min(100, cw * .3), w:700, a:"middle", c:col});
+      if(nd > 1){ var ds = lastDays(p, nd); b += minibars(x + 24, 440, cw - 48, 50, ds.map(function(d){ return d.bbHigh; }), 100, bbColor, ds, 18); }
+      else if(today.bbHigh != null) b += cT(cx, ny + 38, "high " + today.bbHigh + " · low " + today.bbLow, {s:Math.min(26, cw * .08), c:CK.mut, a:"middle"}); });
     el.innerHTML = calSvg(b, "Body battery for " + ppl.map(function(p){ return p.name; }).join(", "));
   }};
 
   KINDS.fitsleep = { every:15 * MIN, draw:function(el, m){
     var ppl = fitPeople(el); if(!ppl) return;
-    var n = ppl.length, cw = 940 / n, nd = fitDays(m), b = cT(20, 34, "LAST NIGHT'S SLEEP", {s:14, w:600, c:CK.mut, ls:1.5});
-    /* a few stars for the night sky */
-    [[120,60],[300,40],[520,70],[700,36],[880,64],[410,22],[820,24]].forEach(function(s, k){ b += cC(s[0], s[1], k % 3 ? 1.6 : 2.4, "var(--ink-3)"); });
-    ppl.forEach(function(p, i){ var x = 10 + cw * i, cx = x + cw / 2, last = (p.days || []).filter(function(d){ return d.sleep != null; })[0] || {}, sc = last.sleep, R = Math.min(105, cw * .36), cy = nd > 1 ? 230 : 260;
-      var col = sc == null ? "var(--ink-3)" : sc >= 80 ? "#7c8cff" : sc >= 60 ? "#4da3ff" : "#f2c94c", circ = 2 * Math.PI * R, frac = sc == null ? 0 : sc / 100;
-      b += '<circle cx="' + r1(cx) + '" cy="' + cy + '" r="' + r1(R) + '" style="fill:none;stroke:var(--line)" stroke-width="16"/>' +
-           '<circle cx="' + r1(cx) + '" cy="' + cy + '" r="' + r1(R) + '" style="fill:none;stroke:' + col + '" stroke-width="16" stroke-linecap="round" stroke-dasharray="' + r1(circ * frac) + ' ' + r1(circ) + '" transform="rotate(-90 ' + r1(cx) + ' ' + cy + ')"/>';
-      b += '<path d="M' + r1(cx + 12) + ' ' + (cy - 64) + ' a22 22 0 1 0 14 34 a17 17 0 1 1 -14 -34z" style="fill:var(--ink-2)"/>';
-      b += cT(cx, cy + 18, sc == null ? "–" : sc, {s:54, w:600, a:"middle"}) + cT(cx, cy + 46, last.sleepH ? last.sleepH + " hours" : "", {s:16, c:CK.mut, a:"middle"});
-      b += initial(cx - 50, cy + R + 44, 14, p) + cT(cx - 28, cy + R + 50, fitT(p.name, cw - 80, 20, true), {s:20, w:600});
-      if(nd > 1){ var ds = lastDays(p, nd); b += minibars(x + 20, 470, cw - 40, 34, ds.map(function(d){ return d.sleep; }), 100, function(v){ return v >= 80 ? "#7c8cff" : v >= 60 ? "#4da3ff" : "#f2c94c"; }, ds); } });
+    var n = ppl.length, cw = 940 / n, nd = fitDays(m), b = title("SLEEP LAST NIGHT"), name = Math.min(40, cw * .14);
+    [[300,40],[520,70],[700,30],[880,60],[410,22],[820,92],[620,24]].forEach(function(s, k){ b += cC(s[0], s[1], k % 3 ? 2 : 3, "var(--ink-3)"); });
+    ppl.forEach(function(p, i){ var x = 10 + cw * i, cx = x + cw / 2, last = lastSleep(p), sc = last.sleep, R = Math.min(nd > 1 ? 120 : 150, cw * .4), cy = nd > 1 ? 230 : 262;
+      var col = sleepColor(sc), circ = 2 * Math.PI * R, frac = sc == null ? 0 : sc / 100;
+      b += '<circle cx="' + r1(cx) + '" cy="' + cy + '" r="' + r1(R) + '" style="fill:none;stroke:var(--line)" stroke-width="26"/>' +
+           '<circle cx="' + r1(cx) + '" cy="' + cy + '" r="' + r1(R) + '" style="fill:none;stroke:' + col + '" stroke-width="26" stroke-linecap="round" stroke-dasharray="' + r1(circ * frac) + ' ' + r1(circ) + '" transform="rotate(-90 ' + r1(cx) + ' ' + cy + ')"/>';
+      b += '<path transform="translate(' + r1(cx) + ' ' + r1(cy - R * .58) + ') scale(' + r1(R / 150) + ')" d="M6 -22 a24 24 0 1 0 18 38 a19 19 0 1 1 -18 -38z" style="fill:var(--ink-2)"/>';
+      b += cT(cx, cy + R * .3, sc == null ? "–" : sc, {s:r1(R * .78), w:700, a:"middle"});
+      b += cT(cx, cy + R * .62, last.sleepH ? last.sleepH + " hours" : "", {s:r1(Math.max(20, R * .2)), c:CK.mut, a:"middle"});
+      b += nameRow(cx, cy + R + 62, p, name, cw - 20);
+      if(nd > 1){ var ds = lastDays(p, nd); b += minibars(x + 24, 450, cw - 48, 44, ds.map(function(d){ return d.sleep == null ? null : Math.max(0, d.sleep - 40); }), 60, function(v){ return sleepColor(v == null ? null : v + 40); }, ds, 18); } });
     el.innerHTML = calSvg(b, "Sleep scores for " + ppl.map(function(p){ return p.name; }).join(", "));
   }};
 
   KINDS.fitsteps = { every:5 * MIN, draw:function(el, m){
     var ppl = fitPeople(el); if(!ppl) return;
-    var n = ppl.length, cw = 940 / n, nd = fitDays(m), b = cT(20, 34, "STEPS TODAY", {s:14, w:600, c:CK.mut, ls:1.5});
+    var n = ppl.length, cw = 940 / n, nd = fitDays(m), b = title("STEPS TODAY"), name = Math.min(40, cw * .14);
+    b += footprint(250, 52, .62, "var(--ink-3)", false) + footprint(272, 36, .62, "var(--ink-3)", true);
     ppl.forEach(function(p, i){ var x = 10 + cw * i, cx = x + cw / 2, t = (p.days || [])[0] || {}, st = t.steps, goal = t.goal || 10000, frac = st == null ? 0 : Math.min(1, st / goal);
-      var trackY = nd > 1 ? 330 : 380, trackH = Math.min(46, cw * .2);
-      b += initial(cx, 80, 26, p) + cT(cx, 136, fitT(p.name, cw - 20, 22, true), {s:22, w:600, a:"middle"});
-      b += cT(cx, 230, st == null ? "–" : Number(st).toLocaleString("en-US"), {s:56, w:600, a:"middle"}) + cT(cx, 262, "of " + Number(goal).toLocaleString("en-US"), {s:17, c:CK.mut, a:"middle"});
-      /* a path of footprints that fills toward the goal */
-      var steps = 8, sw = (cw - 60) / steps;
-      for(var k = 0; k < steps; k++){ var fx = x + 30 + sw * k + sw / 2, fy = trackY + (k % 2 ? 10 : -10), on = (k + 1) / steps <= frac + 1e-9;
-        b += '<ellipse cx="' + r1(fx) + '" cy="' + r1(fy) + '" rx="' + r1(Math.min(9, sw * .22)) + '" ry="' + r1(Math.min(15, sw * .36)) + '" style="fill:' + (on ? (p.color || "#4da3ff") : "var(--line-2)") + '"/>'; }
-      if(frac >= 1) b += cT(cx, trackY + 50, "Goal reached!", {s:18, w:600, c:"#3fbf5f", a:"middle"});
-      if(nd > 1){ var ds = lastDays(p, nd); b += minibars(x + 20, 450, cw - 40, 50, ds.map(function(d){ return d.steps; }), Math.max(goal, 1), function(){ return p.color || "#4da3ff"; }, ds); } });
+      var col = p.color || "#4da3ff", big = Math.min(130, cw * .34);
+      b += nameRow(cx, 112, p, name, cw - 20);
+      b += cT(cx, 250, st == null ? "–" : Number(st).toLocaleString("en-US"), {s:r1(big), w:700, a:"middle"});
+      b += cT(cx, 300, "steps", {s:Math.min(38, cw * .12), w:600, c:col, a:"middle"});
+      var bx = x + 30, bw = cw - 60, by = nd > 1 ? 330 : 350, bh = 40;
+      b += cR(bx, by, bw, bh, "var(--line)", {rx:20}) + cR(bx, by, Math.max(bh, bw * frac), bh, col, {rx:20});
+      b += footprint(bx + Math.max(bh, bw * frac) - 18, by + bh / 2, .7, CK.dark, false);
+      if(nd > 1){ var ds = lastDays(p, nd); b += minibars(x + 24, 410, cw - 48, 70, ds.map(function(d){ return d.steps; }), Math.max(goal, 1), function(){ return col; }, ds, 18); }
+      else b += cT(cx, by + bh + 52, (st == null ? "" : Math.round(frac * 100) + "% of the goal · ") + Number(goal).toLocaleString("en-US"), {s:Math.min(28, cw * .09), c:CK.mut, a:"middle"}); });
     el.innerHTML = calSvg(b, "Steps today for " + ppl.map(function(p){ return p.name; }).join(", "));
   }};
 
@@ -2290,25 +2303,26 @@ html.lightlook .mapwrap .credit{color:#3b4855; text-shadow:none}
      than one day, each cell shows the run of days. */
   KINDS.fitcompare = { every:5 * MIN, draw:function(el, m){
     var ppl = fitPeople(el); if(!ppl) return;
-    var rows = [["battery","Body battery"],["sleep","Sleep score"],["steps","Steps"]].filter(function(r){ return opt(m, r[0], true); });
+    var rows = [["battery","Battery"],["sleep","Sleep"],["steps","Steps"]].filter(function(r){ return opt(m, r[0], true); });
     if(!rows.length){ quietBox(el, "Fitness: tick a measure in its settings"); return; }
-    var nd = fitDays(m), x0 = 190, cw = (950 - x0) / ppl.length, top = 100, rh = (530 - top) / rows.length, b = cT(20, 40, nd > 1 ? "THE LAST " + nd + " DAYS" : "TODAY", {s:14, w:600, c:CK.mut, ls:1.5});
-    ppl.forEach(function(p, i){ var cx = x0 + cw * i + cw / 2; b += initial(cx, 46, 20, p) + cT(cx, 86, fitT(p.name, cw - 10, 18, true), {s:18, w:600, a:"middle"}); });
+    var nd = fitDays(m), x0 = 230, cw = (950 - x0) / ppl.length, top = 118, rh = (536 - top) / rows.length, b = title(nd > 1 ? "THE LAST " + nd + " DAYS" : "TODAY");
+    var name = Math.min(36, cw * .16);
+    ppl.forEach(function(p, i){ b += nameRow(x0 + cw * i + cw / 2, 96, p, name, cw - 10); });
     var best = {};
-    rows.forEach(function(r){ var vals = ppl.map(function(p){ var d = (p.days || [])[0] || {}; return r[0] === "battery" ? d.bb : r[0] === "sleep" ? ((p.days || []).filter(function(x){ return x.sleep != null; })[0] || {}).sleep : d.steps; });
-      best[r[0]] = Math.max.apply(null, vals.filter(function(v){ return v != null; }).concat([-1])); });
+    function val(p, key){ var d = (p.days || [])[0] || {}; return key === "battery" ? d.bb : key === "sleep" ? lastSleep(p).sleep : d.steps; }
+    rows.forEach(function(r){ var vals = ppl.map(function(p){ return val(p, r[0]); }).filter(function(v){ return v != null; }); best[r[0]] = vals.length ? Math.max.apply(null, vals) : null; });
     rows.forEach(function(r, j){ var y = top + rh * j;
-      b += cL(20, y, 940, y, CK.grid) + cT(24, y + rh / 2 + 6, r[1], {s:19, w:600});
-      ppl.forEach(function(p, i){ var cx = x0 + cw * i + cw / 2, ds = lastDays(p, nd), key = r[0] === "battery" ? "bb" : r[0] === "sleep" ? "sleep" : "steps";
-        var today = r[0] === "sleep" ? ((p.days || []).filter(function(x){ return x.sleep != null; })[0] || {}).sleep : ((p.days || [])[0] || {})[key];
-        var txt = today == null ? "–" : r[0] === "steps" ? Number(today).toLocaleString("en-US") : today, col = r[0] === "battery" ? bbColor(today) : r[0] === "sleep" ? "#7c8cff" : (p.color || "#4da3ff");
+      b += cL(20, y, 940, y, CK.grid, 2) + cT(24, y + rh / 2 + 14, r[1], {s:38, w:700});
+      ppl.forEach(function(p, i){ var cx = x0 + cw * i + cw / 2, key = r[0] === "battery" ? "bb" : r[0], today = val(p, r[0]);
+        var txt = today == null ? "–" : r[0] === "steps" ? Number(today).toLocaleString("en-US") : today;
+        var col = r[0] === "battery" ? bbColor(today) : r[0] === "sleep" ? sleepColor(today) : (p.color || "#4da3ff");
         if(nd === 1){
-          var max = r[0] === "steps" ? Math.max(best.steps, ((p.days || [])[0] || {}).goal || 10000, 1) : 100, w = cw * .7, h = 14, fr = today == null ? 0 : Math.min(1, today / max);
-          b += cT(cx, y + rh / 2 - 6, txt, {s:30, w:600, a:"middle"}) + cR(cx - w / 2, y + rh / 2 + 10, w, h, "var(--line)", {rx:7}) + cR(cx - w / 2, y + rh / 2 + 10, w * fr, h, col, {rx:7});
-          if(today != null && today === best[r[0]] && ppl.length > 1) b += cT(cx + w / 2 + 4, y + rh / 2 - 6, "★", {s:22, c:"#ffd43b"});
+          var goal = ((p.days || [])[0] || {}).goal || 10000, max = r[0] === "steps" ? Math.max(goal, 1) : 100, w = cw * .78, h = 22, fr = today == null ? 0 : Math.min(1, today / max);
+          b += cT(cx, y + rh / 2 + 4, txt, {s:r1(Math.min(64, rh * .5)), w:700, a:"middle"}) + cR(cx - w / 2, y + rh / 2 + 22, w, h, "var(--line)", {rx:11}) + cR(cx - w / 2, y + rh / 2 + 22, Math.max(h, w * fr), h, col, {rx:11});
+          if(today != null && today === best[r[0]] && ppl.length > 1) b += cT(cx + w / 2 - 10, y + rh / 2 - 20, "★", {s:34, c:"#ffd43b"});
         } else {
-          var vals = ds.map(function(d){ return d[key]; }), mx = r[0] === "steps" ? Math.max.apply(null, vals.filter(function(v){ return v != null; }).concat([1])) : 100;
-          b += cT(cx, y + 30, txt, {s:22, w:600, a:"middle"}) + minibars(cx - cw * .4, y + 40, cw * .8, rh - 72, vals, mx, function(){ return col; }, ds);
+          var vals = lastDays(p, nd).map(function(d){ return key === "bb" ? d.bb : d[key]; }), mx = r[0] === "steps" ? Math.max.apply(null, vals.filter(function(v){ return v != null; }).concat([1])) : 100;
+          b += cT(cx, y + 40, txt, {s:34, w:700, a:"middle"}) + minibars(cx - cw * .42, y + 50, cw * .84, rh - 86, vals, mx, function(){ return col; }, lastDays(p, nd), 16);
         } }); });
     el.innerHTML = calSvg(b, "Everyone's fitness side by side");
   }};
