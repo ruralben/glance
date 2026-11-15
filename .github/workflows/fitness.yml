@@ -1,6 +1,6 @@
 # Refreshes the fitness numbers for Glance Digital Wall Calendar.
-# Signs in to Garmin with each person's saved token, fetches steps, body
-# battery and sleep for the last week, and publishes two locked files as the
+# Signs in to Garmin and Strava with each person's saved token, fetches the
+# numbers (see tools/build_fitness.py), and publishes two locked files as the
 # single commit on the "fitness" branch: the numbers (for the board) and the
 # renewed tokens (for the next run). Nothing readable is published: this
 # repository is public, and so is this job's log.
@@ -40,10 +40,17 @@ jobs:
       - name: Fetch the numbers
         env:
           GARMIN_TOKENS: ${{ secrets.GARMIN_TOKENS }}
+          STRAVA: ${{ secrets.STRAVA }}
           GARMIN_KEY: ${{ secrets.GARMIN_KEY }}
           BOARD_KEY: ${{ secrets.BOARD_KEY }}
           TZ_NAME: America/Chicago
-        run: python tools/build_fitness.py --old-tokens ../old-tokens.enc --out ../fitness.enc --tokens-out ../tokens.enc
+        # A board whose fitness is not set up yet (no GARMIN_KEY) has nothing to fetch.
+        run: |
+          if [ -z "$GARMIN_KEY" ]; then
+            echo "fitness is not set up for this board"
+            exit 0
+          fi
+          python tools/build_fitness.py --old-tokens ../old-tokens.enc --out ../fitness.enc --tokens-out ../tokens.enc
 
       # The fitness branch is always exactly one commit holding two files. It
       # is replaced, not added to, so the repository does not grow.
