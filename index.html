@@ -1749,6 +1749,8 @@ html.lightlook .mapwrap .credit{color:#3b4855; text-shadow:none}
       s.style.background = f <= 0 ? own : mixHex(/^#[0-9a-f]{6}$/i.test(own) ? own : "#000000", L.bg, f);
     });
     if(wasLight !== THEME.light) drawAll();               /* icons and map tiles change with the look */
+    /* Inside the Manager: tell the canvas which look is showing, for its sun and moon button. */
+    if(PREVIEW && window.parent !== window) try{ window.parent.postMessage({type:"glance-look", light:THEME.light}, location.origin); }catch(e){}
   }
   var PREVIEW_LOOK = null;
 
