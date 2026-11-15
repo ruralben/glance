@@ -1499,16 +1499,24 @@ html.lightlook .mapwrap .credit{color:#3b4855; text-shadow:none}
       '<line x1="190" y1="104" x2="190" y2="284" style="stroke:var(--chip)" stroke-width="3" stroke-dasharray="2 6" stroke-linecap="round"/></g>';
     b += TX(190, 178, windU(now.wind), {s:52, w:600}) + TX(190, 204, windUnit(), {s:15, c:"var(--ink-3)"});
     var names = {N:"north", NE:"northeast", E:"east", SE:"southeast", S:"south", SW:"southwest", W:"west", NW:"northwest"};
-    b += TX(400, 120, "Wind from the " + (names[now.dir] || now.dir), {a:"start", s:22, w:600});
-    var y = 156;
-    if(opt(m, "gusts", true) && now.gust != null){ b += TX(400, y, "Gusts to " + windU(now.gust) + " " + windUnit(), {a:"start", s:18}); y += 30; }
-    if(opt(m, "chill", true)){ b += TX(400, y, (now.feels < now.temp ? "Wind chill " : "Feels like ") + T0(now.feels) + "°", {a:"start", s:18, c:"var(--ink-3)"}); y += 30; }
+    /* The words on the right, large, wrapped to fit beside the compass and
+       centered on it from top to bottom. */
+    var lines = [], X0 = 345, room = 365;
+    function wrap(txt, size, bold){ var max = Math.floor(room / (size * (bold ? .53 : .47))), out = [], cur = "";
+      String(txt).split(" ").forEach(function(w){ if(cur && (cur + " " + w).length > max){ out.push(cur); cur = w; } else cur = cur ? cur + " " + w : w; });
+      if(cur) out.push(cur); return out; }
+    function add(txt, o, gap){ wrap(txt, o.s, o.w >= 600).forEach(function(t, i){ lines.push({t:t, o:o, h:o.s * 1.18, gap:i ? 0 : (gap || 0)}); }); }
+    add("Wind from the " + (names[now.dir] || now.dir), {a:"start", s:36, w:600});
+    if(opt(m, "gusts", true) && now.gust != null) add("Gusts to " + windU(now.gust) + " " + windUnit(), {a:"start", s:29}, 14);
+    if(opt(m, "chill", true)) add((now.feels < now.temp ? "Wind chill " : "Feels like ") + T0(now.feels) + "°", {a:"start", s:29, c:"var(--ink-3)"}, lines.length > 2 ? 4 : 14);
     if(opt(m, "outlook", true)){
       var next = x.hours.filter(function(h){ return h.at > Date.now() && h.at < Date.now() + 12 * HOUR; }), say = "";
       if(next.length){ var top = next.reduce(function(a, h){ return h.wind > a.wind ? h : a; }), low = next.reduce(function(a, h){ return h.wind < a.wind ? h : a; });
         say = top.wind > now.wind + 5 ? "Picking up to " + windU(top.wind) + " " + windUnit() + " by " + hourName(new Date(top.at))
             : low.wind < now.wind - 5 ? "Easing to " + windU(low.wind) + " " + windUnit() + " by " + hourName(new Date(low.at)) : "Steady through the next 12 hours"; }
-      b += TX(400, y + 20, say, {a:"start", s:14, c:"var(--ink-3)"}); }
+      if(say) add(say, {a:"start", s:23, c:"var(--ink-3)"}, 18); }
+    var tall = lines.reduce(function(t, l){ return t + l.h + l.gap; }, 0), y = Math.max(10, 180 - tall / 2);
+    lines.forEach(function(l){ y += l.gap + l.h; b += TX(X0, y - l.h * .24, l.t, l.o); });
     el.innerHTML = wxsvg(720, 360, b, "Wind from the " + (names[now.dir] || now.dir) + " at " + windU(now.wind) + " " + windUnit());
   }};
 
@@ -2227,10 +2235,14 @@ html.lightlook .mapwrap .credit{color:#3b4855; text-shadow:none}
       .then(function(t){ return unlock(t); }).then(function(d){ DATA.fit = d; DATA.fitWhy = ""; drawKind.apply(null, FIT_KINDS); })
       .catch(function(){ if(!DATA.fit){ DATA.fitWhy = "Fitness: no numbers published yet"; drawKind.apply(null, FIT_KINDS); } });
   }
-  function fitPeople(el){
+  /* The people a module's settings tick ("who"); none saved means everyone. */
+  function chosen(list, m){ var who = m && m.opts && m.opts.who;
+    return Array.isArray(who) ? list.filter(function(p){ return who.indexOf(p.id) >= 0; }) : list; }
+  function fitPeople(el, m){
     var f = DATA.fit;
     if(!f || !f.people || !f.people.length){ quietBox(el, DATA.fitWhy || (PREVIEW ? "Fitness: sign people in on the Fitness tab, then get the numbers" : "Fitness loading")); return null; }
-    el.classList.add("wxbox"); return f.people.slice(0, 6);
+    var ppl = chosen(f.people, m); if(!ppl.length){ quietBox(el, "Fitness: no one is ticked in this module's settings"); return null; }
+    el.classList.add("wxbox"); return ppl.slice(0, 6);
   }
   function fitDays(m){ return Math.max(1, Math.min(7, +opt(m, "days", 1) || 1)); }
   function lastDays(p, n){ return (p.days || []).slice(0, n).reverse(); }            /* oldest first */
@@ -2241,7 +2253,7 @@ html.lightlook .mapwrap .credit{color:#3b4855; text-shadow:none}
   /* A person's name with their initial, centered over a column. */
   function nameRow(cx, y, p, size, maxW){ var nm = fitT(p.name, maxW - size * 1.4, size, true), w = nm.length * size * .53 + size * 1.25;
     return initial(cx - w / 2 + size * .45, y - size * .34, size * .45, p) + cT(cx - w / 2 + size * 1.15, y, nm, {s:size, w:600}); }
-  function title(txt){ return cT(24, 44, txt, {s:30, w:700, c:CK.mut, ls:2}); }
+  function title(txt){ return '<g data-f="title">' + cT(24, 44, txt, {s:30, w:700, c:CK.mut, ls:2}) + '</g>'; }
   function dayLetter(d){ return DAYS[parseDay(d).getDay()].slice(0, 2); }
   /* Bars for the past few days, with the day under each. */
   function minibars(x, y, w, h, vals, max, colorOf, days, labelSize){
@@ -2260,9 +2272,9 @@ html.lightlook .mapwrap .credit{color:#3b4855; text-shadow:none}
   function footsteps(x, y, s, col){ return footprint(x, y + 6 * s, s, col, true) + footprint(x + 27 * s, y - 6 * s, s, col, false); }
 
   KINDS.fitbattery = { every:5 * MIN, draw:function(el, m){
-    var ppl = fitPeople(el); if(!ppl) return;
+    var ppl = fitPeople(el, m); if(!ppl) return;
     var n = ppl.length, cw = 940 / n, nd = fitDays(m), b = title("BODY BATTERY"), name = Math.min(40, cw * .14);
-    ppl.forEach(function(p, i){ var x = 10 + cw * i, cx = x + cw / 2, today = (p.days || [])[0] || {}, v = today.bb, col = bbColor(v);
+    ppl.forEach(function(p, i){ b += '<g data-f="cell">'; var x = 10 + cw * i, cx = x + cw / 2, today = (p.days || [])[0] || {}, v = today.bb, col = bbColor(v);
       var bh = nd > 1 ? 210 : 270, bwid = Math.min(170, cw * .5), by = 112;
       b += nameRow(cx, 96, p, name, cw - 20);
       b += cR(cx - bwid * .2, by - 14, bwid * .4, 18, "var(--line-2)", {rx:5}) + cR(cx - bwid / 2, by, bwid, bh, "var(--panel)", {rx:20, st:"var(--line-2)", sw:4});
@@ -2273,15 +2285,15 @@ html.lightlook .mapwrap .credit{color:#3b4855; text-shadow:none}
       var ny = by + bh + 92;
       b += cT(cx, ny, v == null ? "–" : v, {s:Math.min(100, cw * .3), w:700, a:"middle", c:col});
       if(nd > 1){ var ds = lastDays(p, nd); b += minibars(x + 24, 440, cw - 48, 50, ds.map(function(d){ return d.bbHigh; }), 100, bbColor, ds, 18); }
-      else if(today.bbHigh != null) b += cT(cx, ny + 38, "high " + today.bbHigh + (today.bbLow != null ? " · low " + today.bbLow : ""), {s:Math.min(26, cw * .08), c:CK.mut, a:"middle"}); });
+      else if(today.bbHigh != null) b += cT(cx, ny + 38, "high " + today.bbHigh + (today.bbLow != null ? " · low " + today.bbLow : ""), {s:Math.min(26, cw * .08), c:CK.mut, a:"middle"}); b += '</g>'; });
     el.innerHTML = calSvg(fitDim(b, ppl), "Body battery for " + ppl.map(function(p){ return p.name; }).join(", "));
   }};
 
   KINDS.fitsleep = { every:15 * MIN, draw:function(el, m){
-    var ppl = fitPeople(el); if(!ppl) return;
+    var ppl = fitPeople(el, m); if(!ppl) return;
     var n = ppl.length, cw = 940 / n, nd = fitDays(m), b = title("SLEEP LAST NIGHT"), name = Math.min(40, cw * .14);
     [[300,40],[520,70],[700,30],[880,60],[410,22],[820,92],[620,24]].forEach(function(s, k){ b += cC(s[0], s[1], k % 3 ? 2 : 3, "var(--ink-3)"); });
-    ppl.forEach(function(p, i){ var x = 10 + cw * i, cx = x + cw / 2, last = lastSleep(p), sc = last.sleep, R = Math.min(nd > 1 ? 120 : 150, cw * .4), cy = nd > 1 ? 230 : 262;
+    ppl.forEach(function(p, i){ b += '<g data-f="cell">'; var x = 10 + cw * i, cx = x + cw / 2, last = lastSleep(p), sc = last.sleep, R = Math.min(nd > 1 ? 120 : 150, cw * .4), cy = nd > 1 ? 230 : 262;
       var col = sleepColor(sc), circ = 2 * Math.PI * R, frac = sc == null ? 0 : sc / 100;
       b += '<circle cx="' + r1(cx) + '" cy="' + cy + '" r="' + r1(R) + '" style="fill:none;stroke:var(--line)" stroke-width="26"/>' +
            '<circle cx="' + r1(cx) + '" cy="' + cy + '" r="' + r1(R) + '" style="fill:none;stroke:' + col + '" stroke-width="26" stroke-linecap="round" stroke-dasharray="' + r1(circ * frac) + ' ' + r1(circ) + '" transform="rotate(-90 ' + r1(cx) + ' ' + cy + ')"/>';
@@ -2289,14 +2301,14 @@ html.lightlook .mapwrap .credit{color:#3b4855; text-shadow:none}
       b += cT(cx, cy + R * .3, sc == null ? "–" : sc, {s:r1(R * .78), w:700, a:"middle"});
       b += cT(cx, cy + R * .62, last.sleepH ? last.sleepH + " hours" : "", {s:r1(Math.max(20, R * .2)), c:CK.mut, a:"middle"});
       b += nameRow(cx, cy + R + 62, p, name, cw - 20);
-      if(nd > 1){ var ds = lastDays(p, nd); b += minibars(x + 24, 450, cw - 48, 44, ds.map(function(d){ return d.sleep == null ? null : Math.max(0, d.sleep - 40); }), 60, function(v){ return sleepColor(v == null ? null : v + 40); }, ds, 18); } });
+      if(nd > 1){ var ds = lastDays(p, nd); b += minibars(x + 24, 450, cw - 48, 44, ds.map(function(d){ return d.sleep == null ? null : Math.max(0, d.sleep - 40); }), 60, function(v){ return sleepColor(v == null ? null : v + 40); }, ds, 18); } b += '</g>'; });
     el.innerHTML = calSvg(fitDim(b, ppl), "Sleep scores for " + ppl.map(function(p){ return p.name; }).join(", "));
   }};
 
   KINDS.fitsteps = { every:5 * MIN, draw:function(el, m){
-    var ppl = fitPeople(el); if(!ppl) return;
+    var ppl = fitPeople(el, m); if(!ppl) return;
     var n = ppl.length, cw = 940 / n, nd = fitDays(m), b = title("STEPS TODAY"), name = Math.min(40, cw * .14);
-    ppl.forEach(function(p, i){ var x = 10 + cw * i, cx = x + cw / 2, t = (p.days || [])[0] || {}, st = t.steps, goal = t.goal || 10000, frac = st == null ? 0 : Math.min(1, st / goal);
+    ppl.forEach(function(p, i){ b += '<g data-f="cell">'; var x = 10 + cw * i, cx = x + cw / 2, t = (p.days || [])[0] || {}, st = t.steps, goal = t.goal || 10000, frac = st == null ? 0 : Math.min(1, st / goal);
       var col = p.color || "#4da3ff", big = Math.min(130, cw * .34);
       b += nameRow(cx, 112, p, name, cw - 20);
       b += cT(cx, 250, st == null ? "–" : Number(st).toLocaleString("en-US"), {s:r1(big), w:700, a:"middle"});
@@ -2305,14 +2317,14 @@ html.lightlook .mapwrap .credit{color:#3b4855; text-shadow:none}
       var bx = x + 30, bw = cw - 60, by = nd > 1 ? 330 : 350, bh = 40;
       b += cR(bx, by, bw, bh, "var(--line)", {rx:20}) + cR(bx, by, Math.max(bh, bw * frac), bh, col, {rx:20});
       if(nd > 1){ var ds = lastDays(p, nd); b += minibars(x + 24, 410, cw - 48, 70, ds.map(function(d){ return d.steps; }), Math.max(goal, 1), function(){ return col; }, ds, 18); }
-      else b += cT(cx, by + bh + 52, (st == null ? "" : Math.round(frac * 100) + "% of the goal · ") + Number(goal).toLocaleString("en-US"), {s:Math.min(28, cw * .09), c:CK.mut, a:"middle"}); });
+      else b += cT(cx, by + bh + 52, (st == null ? "" : Math.round(frac * 100) + "% of the goal · ") + Number(goal).toLocaleString("en-US"), {s:Math.min(28, cw * .09), c:CK.mut, a:"middle"}); b += '</g>'; });
     el.innerHTML = calSvg(fitDim(b, ppl), "Steps today for " + ppl.map(function(p){ return p.name; }).join(", "));
   }};
 
   /* Everyone side by side: a row per measure, a column per person. With more
      than one day, each cell shows the run of days. */
   KINDS.fitcompare = { every:5 * MIN, draw:function(el, m){
-    var ppl = fitPeople(el); if(!ppl) return;
+    var ppl = fitPeople(el, m); if(!ppl) return;
     var rows = [["battery","Battery"],["sleep","Sleep"],["steps","Steps"]].filter(function(r){ return opt(m, r[0], true); });
     if(!rows.length){ quietBox(el, "Fitness: tick a measure in its settings"); return; }
     var nd = fitDays(m), x0 = 230, cw = (950 - x0) / ppl.length, top = 118, rh = (536 - top) / rows.length, b = title(nd > 1 ? "THE LAST " + nd + " DAYS" : "TODAY");
@@ -2360,12 +2372,12 @@ html.lightlook .mapwrap .credit{color:#3b4855; text-shadow:none}
   /* A calendar of squares, one per day: how close each person came to their
      step goal. A full square is the goal met; today has a ring. */
   KINDS.fitgoals = { every:5 * MIN, draw:function(el, m){
-    var ppl = fitPeople(el); if(!ppl) return;
+    var ppl = fitPeople(el, m); if(!ppl) return;
     var weeks = Math.max(4, Math.min(13, +opt(m, "weeks", 8) || 8)), n = ppl.length, cw = 940 / n, b = title("STEP GOALS · " + weeks + " WEEKS");
     var today = new Date(), start = addDays(today, -today.getDay() - 7 * (weeks - 1));        /* the Sunday that begins the first week */
     var cell = Math.min((cw - 40) / weeks, 300 / 7), gw = cell * weeks, name = Math.min(40, cw * .14);
     var gy = 130 + Math.max(0, (300 - cell * 7) / 2);                                          /* small grids sit in the middle */
-    ppl.forEach(function(p, i){ var x = 10 + cw * i + (cw - gw) / 2, map = histMap(p), col = p.color || "#4da3ff", met = 0, counted = 0;
+    ppl.forEach(function(p, i){ b += '<g data-f="cell">'; var x = 10 + cw * i + (cw - gw) / 2, map = histMap(p), col = p.color || "#4da3ff", met = 0, counted = 0;
       b += nameRow(10 + cw * i + cw / 2, 100, p, name, cw - 20);
       if(i === 0 || n <= 2) "SMTWTFS".split("").forEach(function(L, d){ b += cT(x - 10, gy + cell * d + cell * .62, L, {s:r1(Math.min(18, cell * .42)), c:CK.mut, a:"end"}); });
       for(var w = 0; w < weeks; w++) for(var d = 0; d < 7; d++){
@@ -2377,14 +2389,14 @@ html.lightlook .mapwrap .credit{color:#3b4855; text-shadow:none}
         if(isoDay(day) === isoDay(today)) b += cR(cx - 3, cy - 3, s + 6, s + 6, "none", {rx:r1(s * .25), st:CK.ink, sw:3}); }
       var note = stillBuilding(p);
       b += cT(10 + cw * i + cw / 2, gy + cell * 7 + 42, counted ? "Goal met " + met + " of " + counted + " days" : "No steps yet", {s:r1(Math.min(30, cw * .085)), w:600, a:"middle"});
-      if(note) b += cT(10 + cw * i + cw / 2, gy + cell * 7 + 72, "Filling in: " + note, {s:r1(Math.min(20, cw * .06)), c:CK.mut, a:"middle"}); });
+      if(note) b += cT(10 + cw * i + cw / 2, gy + cell * 7 + 72, "Filling in: " + note, {s:r1(Math.min(20, cw * .06)), c:CK.mut, a:"middle"}); b += '</g>'; });
     el.innerHTML = calSvg(fitDim(b, ppl), "Step goals for the last " + weeks + " weeks");
   }};
 
   /* One bar per week: the week's daily average, this week's bar bright. Every
      person is on the same scale, so the bars compare fairly. */
   KINDS.fitweeks = { every:5 * MIN, draw:function(el, m){
-    var ppl = fitPeople(el); if(!ppl) return;
+    var ppl = fitPeople(el, m); if(!ppl) return;
     var M = fitMeasure(m), weeks = Math.max(4, Math.min(12, +opt(m, "weeks", 8) || 8)), n = ppl.length, cw = 940 / n, b = title(M.label.toUpperCase() + " · WEEK BY WEEK");
     var today = new Date(), first = addDays(today, -today.getDay() - 7 * (weeks - 1)), name = Math.min(40, cw * .14);
     var all = ppl.map(function(p){ var map = histMap(p), out = [];
@@ -2392,7 +2404,7 @@ html.lightlook .mapwrap .credit{color:#3b4855; text-shadow:none}
         for(var d = 0; d < 7; d++){ var day = addDays(first, w * 7 + d); if(day > today) break; var r = map[isoDay(day)]; if(r) vals.push(M.get(r)); }
         out.push(avg(vals)); } return out; });
     var max = Math.max.apply(null, [].concat.apply([1], all.map(function(a){ return a.filter(function(v){ return v != null; }); })));
-    ppl.forEach(function(p, i){ var x = 10 + cw * i + 24, w = cw - 48, bw = w / weeks, top = 204, h = 236, col = p.color || "#4da3ff", vals = all[i], now = vals[weeks - 1];
+    ppl.forEach(function(p, i){ b += '<g data-f="cell">'; var x = 10 + cw * i + 24, w = cw - 48, bw = w / weeks, top = 204, h = 236, col = p.color || "#4da3ff", vals = all[i], now = vals[weeks - 1];
       b += nameRow(10 + cw * i + cw / 2, 100, p, name, cw - 20);
       b += cT(10 + cw * i + cw / 2, 152, now == null ? "–" : M.fmt(now), {s:r1(Math.min(44, cw * .13)), w:700, a:"middle"}) +
            cT(10 + cw * i + cw / 2, 180, M === FIT_MEASURES.steps ? "a day, this week" : "this week", {s:r1(Math.min(20, cw * .06)), c:CK.mut, a:"middle"});
@@ -2400,15 +2412,15 @@ html.lightlook .mapwrap .credit{color:#3b4855; text-shadow:none}
         b += cR(x + bw * k + bw * .14, top + h - hh, bw * .72, hh, col, {rx:5, op:last ? 1 : .42}); });
       b += cL(x, top + h + 2, x + w, top + h + 2, CK.grid, 2);
       b += cT(x, top + h + 34, shortDate(first), {s:r1(Math.min(22, cw * .07)), c:CK.mut}) + cT(x + w, top + h + 34, "This week", {s:r1(Math.min(22, cw * .07)), w:600, c:col, a:"end"});
-      var note = stillBuilding(p); if(note) b += cT(10 + cw * i + cw / 2, top + h + 66, "Filling in: " + note, {s:r1(Math.min(18, cw * .055)), c:CK.mut, a:"middle"}); });
+      var note = stillBuilding(p); if(note) b += cT(10 + cw * i + cw / 2, top + h + 66, "Filling in: " + note, {s:r1(Math.min(18, cw * .055)), c:CK.mut, a:"middle"}); b += '</g>'; });
     el.innerHTML = calSvg(fitDim(b, ppl), M.label + " week by week");
   }};
 
   /* The last 7 days against the 7 before them, as one big number and an arrow. */
   KINDS.fitvs = { every:5 * MIN, draw:function(el, m){
-    var ppl = fitPeople(el); if(!ppl) return;
+    var ppl = fitPeople(el, m); if(!ppl) return;
     var M = fitMeasure(m), n = ppl.length, cw = 940 / n, b = title(M.label.toUpperCase() + " · THIS WEEK VS. LAST"), name = Math.min(40, cw * .14);
-    ppl.forEach(function(p, i){ var cx = 10 + cw * i + cw / 2, map = histMap(p), a = avg(span(map, M.get, 7, 0)), was = avg(span(map, M.get, 7, 7));
+    ppl.forEach(function(p, i){ b += '<g data-f="cell">'; var cx = 10 + cw * i + cw / 2, map = histMap(p), a = avg(span(map, M.get, 7, 0)), was = avg(span(map, M.get, 7, 7));
       b += nameRow(cx, 100, p, name, cw - 20);
       b += cT(cx, 250, a == null ? "–" : M.fmt(a), {s:r1(Math.min(120, cw * .3)), w:700, a:"middle"});
       b += cT(cx, 292, M.unit, {s:r1(Math.min(28, cw * .085)), c:CK.mut, a:"middle"});
@@ -2418,17 +2430,17 @@ html.lightlook .mapwrap .credit{color:#3b4855; text-shadow:none}
           '<path d="M' + r1(cx - s * 3.4) + ' ' + r1(ay + (up ? s * .5 : -s * .5)) + ' l' + r1(s * .7) + ' ' + r1(up ? -s : s) + ' l' + r1(s * .7) + ' ' + r1(up ? s : -s) + 'z" style="fill:' + col + '"/>' +
           cT(cx - s * 1.7, ay + s * .45, (up ? "+" : "−") + M.fmt(Math.abs(diff)), {s:r1(s * 1.3), w:700, c:col});
         b += cT(cx, 440, "The week before: " + M.fmt(was), {s:r1(Math.min(24, cw * .075)), c:CK.mut, a:"middle"});
-      } else b += cT(cx, 380, "Needs two weeks of numbers", {s:r1(Math.min(24, cw * .075)), c:CK.mut, a:"middle"}); });
+      } else b += cT(cx, 380, "Needs two weeks of numbers", {s:r1(Math.min(24, cw * .075)), c:CK.mut, a:"middle"}); b += '</g>'; });
     el.innerHTML = calSvg(fitDim(b, ppl), M.label + ", this week against last week");
   }};
 
   /* Streaks and personal bests from the history. */
   KINDS.fitbest = { every:5 * MIN, draw:function(el, m){
-    var ppl = fitPeople(el); if(!ppl) return;
+    var ppl = fitPeople(el, m); if(!ppl) return;
     var n = ppl.length, cw = 940 / n, name = Math.min(40, cw * .14), oldest = null;
     ppl.forEach(function(p){ (p.hist || p.days || []).forEach(function(r){ if(r.d && (!oldest || r.d < oldest)) oldest = r.d; }); });
     var b = title("STREAKS AND BESTS" + (oldest ? " · SINCE " + shortDate(parseDay(oldest)).toUpperCase() : ""));
-    ppl.forEach(function(p, i){ var cx = 10 + cw * i + cw / 2, map = histMap(p), col = p.color || "#4da3ff", rows = (p.hist || p.days || []).slice();
+    ppl.forEach(function(p, i){ b += '<g data-f="cell">'; var cx = 10 + cw * i + cw / 2, map = histMap(p), col = p.color || "#4da3ff", rows = (p.hist || p.days || []).slice();
       /* Today counts once its goal is met; until then the streak runs to yesterday. */
       var t = new Date(), k = goalMet(map[isoDay(t)]) ? 0 : 1, streak = 0;
       while(goalMet(map[isoDay(addDays(t, -k))])){ streak++; k++; }
@@ -2444,7 +2456,7 @@ html.lightlook .mapwrap .credit{color:#3b4855; text-shadow:none}
       var big = Math.min(58, cw * .17), small = Math.min(22, cw * .066);
       b += nameRow(cx, 100, p, name, cw - 20);
       stats.forEach(function(s, j){ var y = 178 + j * 96;
-        b += cT(cx, y, s[0], {s:r1(big), w:700, c:s[2], a:"middle"}) + cT(cx, y + small + 8, s[1], {s:r1(small), c:CK.mut, a:"middle"}); }); });
+        b += cT(cx, y, s[0], {s:r1(big), w:700, c:s[2], a:"middle"}) + cT(cx, y + small + 8, s[1], {s:r1(small), c:CK.mut, a:"middle"}); }); b += '</g>'; });
     el.innerHTML = calSvg(fitDim(b, ppl), "Streaks and bests for " + ppl.map(function(p){ return p.name; }).join(", "));
   }};
 
@@ -2461,7 +2473,7 @@ html.lightlook .mapwrap .credit{color:#3b4855; text-shadow:none}
     var who = bad.length && bad.length < ppl.length ? " for " + bad.map(function(p){ return p.name; }).join(" and ") : "";
     var msg = bad.length ? (src || "Garmin") + " not answering" + who + (since ? " since " + agoTime(since) : "") : "Fitness numbers not updated since " + agoTime(f.at);
     var w = Math.min(900, msg.length * 15 + 60);
-    return '<g opacity=".38">' + b + '</g>' + cR(480 - w / 2, 470, w, 52, "#3a2412", {rx:12, st:"#f0a93b", sw:2}) + cT(480, 505, msg, {s:26, w:700, c:"#f6c27a", a:"middle"});
+    return '<g opacity=".38" data-f="dim">' + b + '</g><g data-f="warn">' + cR(480 - w / 2, 470, w, 52, "#3a2412", {rx:12, st:"#f0a93b", sw:2}) + cT(480, 505, msg, {s:26, w:700, c:"#f6c27a", a:"middle"}) + '</g>';
   }
   function todayOf(p){ var t = p.today; return t && t.d === isoDay(new Date()) ? t : null; }
   function hourLabel(h){ h = ((h % 24) + 24) % 24; return h === 0 ? "Midnight" : h === 12 ? "Noon" : (h % 12) + (h < 12 ? " AM" : " PM"); }
@@ -2469,12 +2481,12 @@ html.lightlook .mapwrap .credit{color:#3b4855; text-shadow:none}
 
   /* Body battery through the day: a line per person from midnight to now. */
   KINDS.fitbbday = { every:5 * MIN, draw:function(el, m){
-    var ppl = fitPeople(el); if(!ppl) return;
+    var ppl = fitPeople(el, m); if(!ppl) return;
     var cd = opt(m, "cd", true), b = title("BODY BATTERY TODAY"), x0 = 70, x1 = 800, y0 = 110, y1 = cd ? 392 : 462, now = nowMin();
     var X = function(mn){ return x0 + (x1 - x0) * mn / 1440; }, Y = function(v){ return y1 - (y1 - y0) * v / 100; };
-    [0,25,50,75,100].forEach(function(v){ b += cL(x0, Y(v), x1, Y(v), CK.grid) + cT(x0 - 10, Y(v) + 6, v, {s:16, c:CK.mut, a:"end"}); });
-    [0,6,12,18].forEach(function(h){ b += cT(X(h * 60), y1 + 28, hourLabel(h), {s:16, c:CK.mut, a:"middle"}); });
-    b += cL(X(now), y0 - 8, X(now), y1, CK.ink, 2, .45) + cT(X(now), y0 - 14, "NOW", {s:14, w:700, c:CK.mut, a:"middle", ls:1});
+    [0,25,50,75,100].forEach(function(v){ b += cL(x0, Y(v), x1, Y(v), CK.grid) + cT(x0 - 10, Y(v) + 7, v, {s:20, c:CK.mut, a:"end"}); });
+    [0,6,12,18].forEach(function(h){ b += cT(X(h * 60), y1 + 30, hourLabel(h), {s:20, c:CK.mut, a:"middle"}); });
+    b += cL(X(now), y0 - 8, X(now), y1, CK.ink, 2, .45) + cT(X(now), y0 - 14, "NOW", {s:18, w:700, c:CK.mut, a:"middle", ls:1});
     var ends = [];
     ppl.forEach(function(p){ var t = todayOf(p), pts = (t && t.bbc || []).filter(function(q){ return q[0] >= 0 && q[0] <= now; }); if(pts.length < 2) return;
       var col = p.color || "#4da3ff", d = "M" + pts.map(function(q){ return r1(X(q[0])) + " " + r1(Y(q[1])); }).join(" L");
@@ -2486,16 +2498,17 @@ html.lightlook .mapwrap .credit{color:#3b4855; text-shadow:none}
     ends.forEach(function(e, i){ b += cT(Math.max(e.x, X(now)) + 22, ly[i] + 10, e.v, {s:30, w:700, c:e.p.color}) + cT(Math.max(e.x, X(now)) + 68, ly[i] + 10, fitT(e.p.name, 90, 22, true), {s:22, w:600}); });
     if(cd){ var cw = 920 / ppl.length; ppl.forEach(function(p, i){ var t = todayOf(p) || {}, x = 30 + cw * i;
       b += nameRow(x + cw / 2, 464, p, Math.min(26, cw * .1), cw - 10);
-      b += cT(x + cw / 2, 504, (t.charged != null ? "+" + t.charged + " charged" : "") + (t.drained != null ? "   −" + t.drained + " used" : ""), {s:Math.min(21, cw * .085), c:CK.mut, a:"middle"}); }); }
+      b += cT(x + cw / 2, 504, (t.charged != null ? "+" + t.charged + " charged" : "") + (t.drained != null ? "   −" + t.drained + " used" : ""), {s:Math.min(25, cw * .09), c:CK.mut, a:"middle"}); }); }
     el.innerHTML = calSvg(fitDim(b, ppl), "Body battery through the day for " + ppl.map(function(p){ return p.name; }).join(", "));
   }};
 
   /* Stress today: a strip per person from 6 AM to now, in Garmin's stress colors. */
   KINDS.fitstress = { every:5 * MIN, draw:function(el, m){
-    var ppl = fitPeople(el); if(!ppl) return;
+    var ppl = fitPeople(el, m); if(!ppl) return;
     var b = title("STRESS TODAY"), x0 = 190, x1 = 790, h0 = 6 * 60, now = Math.max(nowMin(), h0 + 60), cols = ["#3b8de0", "#f6b26b", "#f08a2c", "#d4580a"];
     var X = function(mn){ return x0 + (x1 - x0) * (mn - h0) / (now - h0); }, n = ppl.length, rh = Math.min(100, 370 / n);
-    for(var h = 6; h * 60 <= now; h += 3) b += cT(X(h * 60), 486, hourLabel(h), {s:16, c:CK.mut, a:"middle"});
+    var yb = 90 + n * rh;                                                        /* the bottom of the last row */
+    for(var h = 6; h * 60 <= now; h += 3) b += cT(X(h * 60), yb + 26, hourLabel(h), {s:20, c:CK.mut, a:"middle"});
     ppl.forEach(function(p, i){ var y = 90 + i * rh, t = todayOf(p), pts = (t && t.stc || []).filter(function(q){ return q[0] >= h0 && q[0] < now; });
       b += nameRow(24 + Math.min(30, rh * .32) * 2.4, y + rh * .5, p, Math.min(30, rh * .32), 150);
       b += cR(x0, y + rh * .2, x1 - x0, rh * .55, CK.grid, {rx:4});
@@ -2503,65 +2516,65 @@ html.lightlook .mapwrap .credit{color:#3b4855; text-shadow:none}
         b += cR(X(q[0]), y + rh * .2, Math.max(2, X(q[0] + 15) - X(q[0]) - 1.5), rh * .55, cols[lvl], {rx:2}); });
       var avg = t && t.stressAvg != null ? t.stressAvg : null;
       b += cT(930, y + rh * .55, avg == null ? "–" : avg, {s:Math.min(48, rh * .5), w:700, a:"end"}) +
-           cT(930, y + rh * .55 + 22, avg == null ? "" : avg <= 25 ? "resting" : avg <= 50 ? "low" : avg <= 75 ? "medium" : "high", {s:16, c:CK.mut, a:"end"}); });
-    var lx = 190; [["Rest",0],["Low",1],["Medium",2],["High",3]].forEach(function(k){ b += cR(lx, 508, 18, 14, cols[k[1]], {rx:3}) + cT(lx + 24, 521, k[0], {s:15, c:CK.mut}); lx += 110; });
+           cT(930, y + rh * .55 + 24, avg == null ? "" : avg <= 25 ? "resting" : avg <= 50 ? "low" : avg <= 75 ? "medium" : "high", {s:20, c:CK.mut, a:"end"}); });
+    var lx = 190; [["Rest",0],["Low",1],["Medium",2],["High",3]].forEach(function(k){ b += cR(lx, yb + 46, 22, 18, cols[k[1]], {rx:3}) + cT(lx + 30, yb + 63, k[0], {s:20, c:CK.mut}); lx += 140; });
     el.innerHTML = calSvg(fitDim(b, ppl), "Stress through the day");
   }};
 
   /* Resting heart rate, with its trend over 7 or 30 days. */
   KINDS.fitrhr = { every:5 * MIN, draw:function(el, m){
-    var ppl = fitPeople(el); if(!ppl) return;
+    var ppl = fitPeople(el, m); if(!ppl) return;
     var days = +opt(m, "days", 30) || 30, n = ppl.length, cw = 940 / n, b = title("RESTING HEART RATE"), name = Math.min(34, cw * .13);
-    ppl.forEach(function(p, i){ var cx = 10 + cw * i + cw / 2, map = histMap(p), vals = span(map, function(r){ return r.rhr; }, days, 0), col = p.color || "#4da3ff";
+    ppl.forEach(function(p, i){ b += '<g data-f="cell">'; var cx = 10 + cw * i + cw / 2, map = histMap(p), vals = span(map, function(r){ return r.rhr; }, days, 0), col = p.color || "#4da3ff";
       var have = vals.filter(function(v){ return v != null; }), now = have.length ? have[have.length - 1] : null, first = have.length ? have[0] : null;
       b += nameRow(cx, 104, p, name, cw - 20);
       var big = Math.min(88, cw * .3);
       b += '<path transform="translate(' + r1(cx - big * .72) + ' ' + r1(200) + ') scale(' + r1(big / 28) + ')" d="M0 8 C-14 -4 -10 -16 0 -9 C10 -16 14 -4 0 8 Z" style="fill:#e2564a"/>';
       b += cT(cx - big * .3, 228, now == null ? "–" : now, {s:r1(big), w:700});
-      b += cT(cx, 266, "beats a minute, resting", {s:Math.min(19, cw * .075), c:CK.mut, a:"middle"});
+      b += cT(cx, 270, "beats a minute, resting", {s:Math.min(25, cw * .09), c:CK.mut, a:"middle"});
       if(have.length > 1){ var x0 = cx - cw * .4, x1 = cx + cw * .4, y0 = 300, y1 = 420, mn = Math.min.apply(null, have) - 1, mx = Math.max.apply(null, have) + 1, pts = [];
         vals.forEach(function(v, k){ if(v != null) pts.push([x0 + (x1 - x0) * k / (days - 1), y1 - (y1 - y0) * (v - mn) / (mx - mn)]); });
         var d = "M" + pts.map(function(q){ return r1(q[0]) + " " + r1(q[1]); }).join(" L");
         b += '<path d="' + d + " L" + r1(pts[pts.length - 1][0]) + " " + y1 + " L" + r1(pts[0][0]) + " " + y1 + ' Z" style="fill:' + col + '" fill-opacity=".16"/>' +
              '<path d="' + d + '" style="fill:none;stroke:' + col + '" stroke-width="3" stroke-linejoin="round"/>' + cC(pts[pts.length - 1][0], pts[pts.length - 1][1], 6, col);
         var dd = now - first;
-        b += cT(cx, 462, dd === 0 ? "Same as " + days + " days ago" : (dd < 0 ? "▼ " + (-dd) : "▲ " + dd) + " in " + days + " days", {s:Math.min(19, cw * .075), w:600, c:dd <= 0 ? "#3fbf5f" : "#f0a93b", a:"middle"});
-      } else b += cT(cx, 380, "The trend fills in over a few days", {s:Math.min(18, cw * .07), c:CK.mut, a:"middle"}); });
+        b += cT(cx, 462, dd === 0 ? "Same as " + days + " days ago" : (dd < 0 ? "▼ " + (-dd) : "▲ " + dd) + " in " + days + " days", {s:Math.min(25, cw * .09), w:600, c:dd <= 0 ? "#3fbf5f" : "#f0a93b", a:"middle"});
+      } else b += cT(cx, 380, "The trend fills in over a few days", {s:Math.min(24, cw * .08), c:CK.mut, a:"middle"}); b += '</g>'; });
     el.innerHTML = calSvg(fitDim(b, ppl), "Resting heart rate");
   }};
 
   /* Last night's sleep stages, from bedtime to waking. */
   KINDS.fitstages = { every:5 * MIN, draw:function(el, m){
-    var ppl = fitPeople(el); if(!ppl) return;
+    var ppl = fitPeople(el, m); if(!ppl) return;
     var cols = ["#1f4fa8", "#4da3ff", "#a98bfa", "#f783ac"], rowY = [36, 22, 8, 0];
     var all = ppl.map(todayOf).filter(function(t){ return t && t.stages && t.stages.length; });
     var lo = Math.min.apply(null, [-180].concat(all.map(function(t){ return t.stages[0][0]; }))), hi = Math.max.apply(null, [420].concat(all.map(function(t){ return t.stages[t.stages.length - 1][1]; })));
     lo = Math.floor(lo / 60) * 60; hi = Math.ceil(hi / 60) * 60;
     var b = title("LAST NIGHT'S SLEEP"), x0 = 190, x1 = 780, X = function(mn){ return x0 + (x1 - x0) * (mn - lo) / (hi - lo); }, n = ppl.length, rh = Math.min(96, 370 / n);
-    for(var h = lo; h <= hi; h += 120){ b += cL(X(h), 90, X(h), 90 + rh * n, CK.grid) + cT(X(h), 90 + rh * n + 26, hourLabel(Math.round(h / 60)), {s:16, c:CK.mut, a:"middle"}); }
+    for(var h = lo; h <= hi; h += 120){ b += cL(X(h), 90, X(h), 90 + rh * n, CK.grid) + cT(X(h), 90 + rh * n + 28, hourLabel(Math.round(h / 60)), {s:20, c:CK.mut, a:"middle"}); }
     ppl.forEach(function(p, i){ var y = 90 + i * rh + 8, t = todayOf(p), sc = rh / 96, row = histMap(p)[isoDay(new Date())] || {};
       b += nameRow(24 + Math.min(30, rh * .32) * 2.4, y + 36 * sc, p, Math.min(30, rh * .32), 150);
       if(!t || !t.stages){ b += cT((x0 + x1) / 2, y + 36 * sc, "No sleep recorded", {s:20, c:CK.mut, a:"middle"}); return; }
       t.stages.forEach(function(s){ var k = Math.max(0, Math.min(3, s[2])); b += cR(X(s[0]), y + rowY[k] * sc, Math.max(1.5, X(s[1]) - X(s[0])), 22 * sc, cols[k], {rx:3}); });
       var hrs = row.sleepH != null ? row.sleepH : (t.wake - t.bed) / 60, hh = Math.floor(hrs), mm = Math.round((hrs - hh) * 60);
-      b += cT(930, y + 30 * sc, hh + " h " + mm + " m", {s:Math.min(34, rh * .36), w:700, a:"end"}) + cT(930, y + 56 * sc, row.sleep != null ? "score " + row.sleep : "", {s:18, c:CK.mut, a:"end"}); });
-    var lx = 190; [["Deep",0],["Light",1],["REM",2],["Awake",3]].forEach(function(k){ b += cR(lx, 508, 18, 14, cols[k[1]], {rx:3}) + cT(lx + 24, 521, k[0], {s:15, c:CK.mut}); lx += 100; });
+      b += cT(930, y + 30 * sc, hh + " h " + mm + " m", {s:Math.min(34, rh * .36), w:700, a:"end"}) + cT(930, y + 56 * sc, row.sleep != null ? "score " + row.sleep : "", {s:22, c:CK.mut, a:"end"}); });
+    var lx = 190, yk = 90 + rh * n + 48; [["Deep",0],["Light",1],["REM",2],["Awake",3]].forEach(function(k){ b += cR(lx, yk, 22, 18, cols[k[1]], {rx:3}) + cT(lx + 30, yk + 17, k[0], {s:20, c:CK.mut}); lx += 125; });
     el.innerHTML = calSvg(fitDim(b, ppl), "Last night's sleep stages");
   }};
 
   /* Active minutes this week toward Garmin's goal (150 unless set); vigorous count double. Garmin's week starts Monday. */
   KINDS.fitactive = { every:5 * MIN, draw:function(el, m){
-    var ppl = fitPeople(el); if(!ppl) return;
+    var ppl = fitPeople(el, m); if(!ppl) return;
     var n = ppl.length, cw = 940 / n, b = title("ACTIVE MINUTES THIS WEEK"), name = Math.min(34, cw * .13), today = new Date(), back = (today.getDay() + 6) % 7;
-    ppl.forEach(function(p, i){ var cx = 10 + cw * i + cw / 2, map = histMap(p), mod = 0, vig = 0, goal = 150;
+    ppl.forEach(function(p, i){ b += '<g data-f="cell">'; var cx = 10 + cw * i + cw / 2, map = histMap(p), mod = 0, vig = 0, goal = 150;
       for(var k = 0; k <= back; k++){ var r = map[isoDay(addDays(today, -k))]; if(r){ mod += r.imod || 0; vig += r.ivig || 0; if(r.igoal) goal = r.igoal; } }
       var tot = mod + vig * 2, fr = Math.min(1, tot / goal), R0 = Math.min(92, cw * .34), cy = 272, circ = 2 * Math.PI * R0, col = p.color || "#4da3ff";
       b += nameRow(cx, 104, p, name, cw - 20);
       b += '<circle cx="' + r1(cx) + '" cy="' + cy + '" r="' + r1(R0) + '" style="fill:none;stroke:var(--line-2)" stroke-width="22"/>';
       if(fr > 0) b += '<circle cx="' + r1(cx) + '" cy="' + cy + '" r="' + r1(R0) + '" style="fill:none;stroke:' + col + '" stroke-width="22" stroke-linecap="round" stroke-dasharray="' + r1(circ * fr) + ' ' + r1(circ) + '" transform="rotate(-90 ' + r1(cx) + ' ' + cy + ')"/>';
-      b += cT(cx, cy + 16, tot, {s:r1(Math.min(58, R0 * .62)), w:700, a:"middle"}) + cT(cx, cy + 44, "of " + goal, {s:18, c:CK.mut, a:"middle"});
-      b += cT(cx, 420, mod + " moderate", {s:Math.min(21, cw * .08), c:CK.mut, a:"middle"}) + cT(cx, 448, vig + " vigorous × 2", {s:Math.min(21, cw * .08), c:CK.mut, a:"middle"});
-      if(tot >= goal) b += cT(cx, 492, "Goal met", {s:24, w:700, c:"#3fbf5f", a:"middle"}); });
+      b += cT(cx, cy + 16, tot, {s:r1(Math.min(58, R0 * .62)), w:700, a:"middle"}) + cT(cx, cy + 46, "of " + goal, {s:r1(Math.min(24, R0 * .26)), c:CK.mut, a:"middle"});
+      b += cT(cx, 424, mod + " moderate", {s:Math.min(26, cw * .09), c:CK.mut, a:"middle"}) + cT(cx, 458, vig + " vigorous × 2", {s:Math.min(26, cw * .09), c:CK.mut, a:"middle"});
+      if(tot >= goal) b += cT(cx, 502, "Goal met", {s:28, w:700, c:"#3fbf5f", a:"middle"}); b += '</g>'; });
     el.innerHTML = calSvg(fitDim(b, ppl), "Active minutes this week");
   }};
 
@@ -2569,9 +2582,10 @@ html.lightlook .mapwrap .credit{color:#3b4855; text-shadow:none}
   /* From the GitHub job's Strava part (DATA.fit.strava): activities this year,
      the newest one's route, records and every route this year. */
   var SV_KINDS = ["svlatest","svweek","svyear","svfeed","svrecords","svmap"];
-  function svPeople(el){
+  function svPeople(el, m){
     var s = DATA.fit && DATA.fit.strava, ppl = s && s.people || [];
     if(!ppl.length){ quietBox(el, DATA.fit ? "Strava: connect someone on the Fitness tab" : (DATA.fitWhy || "Fitness loading")); return null; }
+    ppl = chosen(ppl, m); if(!ppl.length){ quietBox(el, "Strava: no one is ticked in this module's settings"); return null; }
     el.classList.add("wxbox"); return ppl.slice(0, 6);
   }
   var SV_ORANGE = "#ff7a3d";
@@ -2600,7 +2614,7 @@ html.lightlook .mapwrap .credit{color:#3b4855; text-shadow:none}
 
   /* The newest activity in the family: its route, then distance, time, pace and climb. */
   KINDS.svlatest = { every:5 * MIN, draw:function(el, m){
-    var ppl = svPeople(el); if(!ppl) return;
+    var ppl = svPeople(el, m); if(!ppl) return;
     var U = svUnits(m), pick = ppl.filter(function(p){ return p.latest; }).sort(function(a, c){ return a.latest.d < c.latest.d ? 1 : -1; })[0];
     if(!pick){ quietBox(el, "Strava: no activities yet this year"); return; }
     var a = pick.latest, b = "", route = a.route || [];
@@ -2620,7 +2634,7 @@ html.lightlook .mapwrap .credit{color:#3b4855; text-shadow:none}
 
   /* This week, Monday to Sunday: a bar for each day each person moved. */
   KINDS.svweek = { every:5 * MIN, draw:function(el, m){
-    var ppl = svPeople(el); if(!ppl) return;
+    var ppl = svPeople(el, m); if(!ppl) return;
     var U = svUnits(m), time = opt(m, "measure", "dist") === "time", today = new Date(), back = (today.getDay() + 6) % 7, mon = addDays(today, -back);
     var dl = ["M","T","W","T","F","S","S"], x0 = 200, x1 = 690, bw = (x1 - x0) / 7, n = ppl.length, rh = Math.min(104, 400 / n), b = title("THIS WEEK");
     var sums = ppl.map(function(p){ var d = [0,0,0,0,0,0,0], s = [0,0,0,0,0,0,0], c = 0;
@@ -2640,7 +2654,7 @@ html.lightlook .mapwrap .credit{color:#3b4855; text-shadow:none}
 
   /* The year so far toward each person's goal; the white line is how far through the year it is. */
   KINDS.svyear = { every:15 * MIN, draw:function(el, m){
-    var ppl = svPeople(el); if(!ppl) return;
+    var ppl = svPeople(el, m); if(!ppl) return;
     var U = svUnits(m), now = new Date(), y0 = new Date(now.getFullYear(), 0, 1), pace = (now - y0) / (new Date(now.getFullYear() + 1, 0, 1) - y0);
     var x0 = 200, x1 = 900, n = ppl.length, rh = Math.min(100, 400 / n), b = title("THE YEAR SO FAR");
     ppl.forEach(function(p, i){ var y = 96 + i * rh, v = (p.year || {}).m || 0, goalM = (p.goal || 0) * 1609.344, col = p.color || SV_ORANGE;
@@ -2656,7 +2670,7 @@ html.lightlook .mapwrap .credit{color:#3b4855; text-shadow:none}
 
   /* The family's latest activities, newest first. */
   KINDS.svfeed = { every:5 * MIN, draw:function(el, m){
-    var ppl = svPeople(el); if(!ppl) return;
+    var ppl = svPeople(el, m); if(!ppl) return;
     var U = svUnits(m), k = Math.max(3, Math.min(6, +opt(m, "n", 5) || 5)), all = [];
     ppl.forEach(function(p){ (p.recent || []).forEach(function(a){ all.push({a:a, p:p}); }); });
     all.sort(function(x, y){ return x.a.d < y.a.d ? 1 : -1; });
@@ -2672,7 +2686,7 @@ html.lightlook .mapwrap .credit{color:#3b4855; text-shadow:none}
 
   /* Records this year: the best across everyone, with who and when. NEW for the last two weeks. */
   KINDS.svrecords = { every:15 * MIN, draw:function(el, m){
-    var ppl = svPeople(el); if(!ppl) return;
+    var ppl = svPeople(el, m); if(!ppl) return;
     var U = svUnits(m), fresh = opt(m, "newbadge", true), b = title("RECORDS THIS YEAR");
     function best(key, low){ var top = null; ppl.forEach(function(p){ var r = (p.records || {})[key]; if(r && r.v && (!top || (low ? r.v < top.r.v : r.v > top.r.v))) top = {r:r, p:p}; }); return top; }
     function mmss(s){ var h = Math.floor(s / 3600), mm = Math.floor((s % 3600) / 60), ss = s % 60; return (h ? h + ":" + ("0" + mm).slice(-2) : mm) + ":" + ("0" + ss).slice(-2); }
@@ -2690,7 +2704,7 @@ html.lightlook .mapwrap .credit{color:#3b4855; text-shadow:none}
 
   /* Every route this year on one map; the favorite loops glow brightest. */
   KINDS.svmap = { every:30 * MIN, draw:function(el, m){
-    var ppl = svPeople(el); if(!ppl) return;
+    var ppl = svPeople(el, m); if(!ppl) return;
     var U = svUnits(m), each = opt(m, "who", "all") === "each", all = [], tot = 0, cnt = 0;
     ppl.forEach(function(p){ (p.routes || []).forEach(function(r){ if(r.length > 1) all.push({r:r, p:p}); }); tot += (p.year || {}).m || 0; cnt += (p.year || {}).n || 0; });
     if(!all.length){ quietBox(el, "Strava: no routes yet this year"); return; }
@@ -2703,6 +2717,48 @@ html.lightlook .mapwrap .credit{color:#3b4855; text-shadow:none}
     b += cR(16, 452, 470, 72, "var(--bg)", {rx:10, op:.78}) + cT(32, 498, cnt + " activities · " + svDist(tot, U, 0) + " " + U.du, {s:30, w:700});
     el.innerHTML = calSvg(fitDim(b, ppl, "Strava"), "Every route this year on one map");
   }};
+
+  /* ------------------------------------------- filling the box ---- */
+  /* These modules are drawn on a 960 by 540 picture. Shrinking that picture
+     whole into a box of another shape leaves most of the box empty, so after
+     drawing, the parts are measured and set out again to fill the box: in a
+     module with a part per person, each person's part grows as far as the box
+     allows, in whichever arrangement of columns and rows makes them biggest;
+     any other module is cut down to what it actually draws. */
+  function fitFill(el){
+    var svg = el.querySelector("svg.wxs"); if(!svg) return;
+    var R = svg.getBoundingClientRect(), W = R.width, H = R.height; if(W < 24 || H < 24) return;
+    function bb(n){ try{ var b = n.getBBox(); return b && b.width > 0 && b.height > 0 ? b : null; }catch(e){ return null; } }
+    var GAP = 18, cells = [].slice.call(svg.querySelectorAll('[data-f="cell"]'));
+    if(!cells.length){
+      var a = bb(svg); if(!a) return;
+      var x0 = Math.max(0, a.x - GAP), y0 = Math.max(0, a.y - GAP), x1 = Math.min(960, a.x + a.width + GAP), y1 = Math.min(540, a.y + a.height + GAP);   /* map tiles reach past the picture */
+      if(x1 - x0 > 40 && y1 - y0 > 40) svg.setAttribute("viewBox", [x0, y0, x1 - x0, y1 - y0].map(r1).join(" "));
+      return;
+    }
+    /* Anything that is not the title, a person's part or the warning (such as the
+       stars behind Sleep) belongs to the 960 by 540 picture and is left out. */
+    (function prune(node){ [].slice.call(node.children).forEach(function(c){ var f = c.getAttribute("data-f");
+      if(f === "dim") prune(c); else if(!f && !c.querySelector("[data-f]") && !/^(defs|clipPath|linearGradient)$/.test(c.tagName)) node.removeChild(c); }); })(svg);
+    var boxes = cells.map(bb); if(boxes.some(function(x){ return !x; })) return;
+    var bw = Math.max.apply(null, boxes.map(function(x){ return x.width; })),
+        uy0 = Math.min.apply(null, boxes.map(function(x){ return x.y; })), uy1 = Math.max.apply(null, boxes.map(function(x){ return x.y + x.height; })), bh = uy1 - uy0;
+    var t = svg.querySelector('[data-f="title"]'), tb = t && bb(t), th = tb ? tb.height + GAP : 0;
+    var n = cells.length, best = null;
+    for(var k = 1; k <= n; k++){ var rows = Math.ceil(n / k);
+      var sc = Math.min(W / (k * bw + (k + 1) * GAP), H / (th + rows * bh + (rows + 1) * GAP), tb ? W / (tb.width + 2 * GAP) : 1e9);
+      if(!best || sc > best.s + 1e-6) best = {k:k, rows:rows, s:sc}; }
+    var s = best.s, top = tb ? (tb.height + GAP * 1.5) * s : 0, slotH = (H - top) / best.rows, slotW = W / best.k;
+    svg.setAttribute("viewBox", "0 0 " + r1(W) + " " + r1(H));
+    if(tb) t.setAttribute("transform", "translate(" + r1(GAP * s - tb.x * s) + " " + r1(GAP * .8 * s - tb.y * s) + ") scale(" + s.toFixed(4) + ")");
+    cells.forEach(function(c, i){ var row = Math.floor(i / best.k), col = i % best.k, inRow = Math.min(best.k, n - row * best.k), b = boxes[i];
+      var cx = (W - inRow * slotW) / 2 + slotW * (col + .5), ty = top + slotH * row + (slotH - bh * s) / 2;
+      c.setAttribute("transform", "translate(" + r1(cx - (b.x + b.width / 2) * s) + " " + r1(ty - uy0 * s) + ") scale(" + s.toFixed(4) + ")"); });
+    var w = svg.querySelector('[data-f="warn"]'), wb = w && bb(w);
+    if(wb){ var ws = Math.min(Math.max(s, H / 540), W * .92 / wb.width);
+      w.setAttribute("transform", "translate(" + r1(W / 2 - (wb.x + wb.width / 2) * ws) + " " + r1(H - 8 - (wb.y + wb.height) * ws) + ") scale(" + ws.toFixed(4) + ")"); }
+  }
+  FIT_KINDS.forEach(function(k){ var draw = KINDS[k].draw; KINDS[k].draw = function(el){ draw.apply(this, arguments); try{ fitFill(el); }catch(e){} }; });
 
   /* ========================================================== fonts ==== */
   /* The typefaces a screen or a module may use, with the weights each one
