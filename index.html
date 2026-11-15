@@ -12,12 +12,16 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
-/* One palette, dark, always: this page lives on a wall. By Ben's instruction it
-   carries no author line and no light/dark switch. */
+/* This page lives on a wall, so it carries no author line and no light/dark
+   switch of its own. It is dark unless the layout's Settings choose a light
+   look on a schedule (sunrise to sunset, or set times); the script then sets
+   the palette below, fading between the two. */
 :root{
   --bg:#000000; --surface:#0b0f12; --ink:#f2f4f5; --ink-2:#b3bdc4; --ink-3:#7b8891;
   --line:#2a3238; --line-2:#3c4750; --accent:#48b0c0;
   --warm:#f5c400; --over:#e2564a; --due:#f0a93b; --soon:#e8c75a;
+  --panel:#151b21; --panel2:#1f2731; --band:#3b78c4; --chip:#2bb3e6; --chipInk:#052a3b; --chipSunInk:#3b2500;
+  --rain:#4da3ff; --snowc:#e6eeff; --night:#000000; --cloudband:#c8d2e1;
   color-scheme:dark;
 }
 *{box-sizing:border-box}
@@ -75,6 +79,7 @@ body{
 .m-calendar .ev .when{flex:none; width:5.2em; font-size:1.05em; color:var(--ink-2); text-transform:uppercase; letter-spacing:.02em}
 .m-calendar .ev .what{font-size:1.45em; line-height:1.25; min-width:0; overflow-wrap:anywhere}
 .m-calendar .ev.past{opacity:.45}
+.m-calendar .ev .face{margin-left:auto; flex:none; width:1.7em; height:1.7em; border-radius:50%; display:inline-grid; place-items:center; font-size:1em; font-weight:700; color:#0d141b; align-self:center}
 .m-calendar .roll{will-change:transform}
 /* More below than fits: fade the bottom edge so it reads as "continues". */
 .m-calendar.more{-webkit-mask-image:linear-gradient(to bottom, #000 0, #000 90%, transparent 100%); mask-image:linear-gradient(to bottom, #000 0, #000 90%, transparent 100%)}
@@ -195,6 +200,71 @@ body{
 .m-planes .row b span{font-weight:400; color:var(--ink-2)}
 .m-planes .row small{display:block; font-size:.95em; color:var(--ink-3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums}
 .m-planes .none{font-size:1.3em; color:var(--ink-3); margin:auto}
+
+/* --- weather looks drawn as pictures (from the Weather Picks rounds) ------ */
+.wxs{display:block; width:100%; height:100%}
+.mod.wxbox{display:flex; align-items:center; justify-content:center}
+.m-wind.round, .m-radarloop.round, .m-windymap.round{border-radius:.7em}
+.mapwrap{position:absolute; inset:0; overflow:hidden; background:var(--surface)}
+.mapwrap .tiles, .mapwrap .frames{position:absolute; left:0; top:0}
+.mapwrap .tiles img, .mapwrap .frames img{position:absolute; width:256px; height:256px}
+.mapwrap .frames .fr{position:absolute; left:0; top:0; opacity:0}
+.mapwrap .frames .fr.on{opacity:.8}
+.mapwrap canvas{position:absolute; inset:0; width:100%; height:100%}
+.mapwrap .homept{position:absolute; width:.9em; height:.9em; margin:-.45em 0 0 -.45em; border-radius:50%; background:var(--ink); box-shadow:0 0 0 .25em rgba(0,0,0,.45)}
+.mapwrap .cap{position:absolute; left:.6em; top:.5em; font-size:1.3em; font-weight:600; color:#fff; text-shadow:0 0 .3em #000, 0 0 .1em #000}
+.mapwrap .legend{position:absolute; left:.6em; bottom:2.3em; font-size:1.5em; font-weight:600; background:rgba(15,21,28,.78); color:#eef3f7; padding:.2em .6em; border-radius:.3em}
+.mapwrap .credit{position:absolute; right:.4em; bottom:.25em; font-size:.75em; color:#cfd6dc; text-shadow:0 0 .2em #000}
+.mapwrap .timeline{position:absolute; left:0; right:0; bottom:0; height:2em; background:rgba(15,21,28,.8); display:flex; gap:.3em; align-items:center; padding:0 .6em}
+.mapwrap .timeline i{flex:1; height:.35em; background:#3a4654; border-radius:.2em}
+.mapwrap .timeline i.on{background:#2bb3e6}
+.mapwrap .timeline b{font-size:1em; font-weight:500; color:#cfd6dc; margin-left:.4em; white-space:nowrap}
+.mapwrap .pic{position:absolute; inset:0; width:100%; height:100%; object-fit:contain}
+.m-windymap iframe{position:absolute; inset:0; width:100%; height:100%; border:0}
+.m-wxrotate .lyr{position:absolute; inset:0; visibility:hidden}
+.m-wxrotate .lyr.on{visibility:visible}
+.m-wxrotate .lyr > .mod{left:0 !important; top:0 !important; width:100% !important; height:100% !important}
+.compass-needle{transform-box:view-box; animation:needle 4s ease-in-out infinite}
+@keyframes needle{0%,100%{transform:rotate(var(--a0))} 50%{transform:rotate(var(--a1))}}
+@keyframes wfall{0%{transform:translateY(0);opacity:0}15%{opacity:1}80%{opacity:1}100%{transform:translateY(84px);opacity:0}}
+@keyframes wsnow{0%{transform:translate(0,0);opacity:0}15%{opacity:1}80%{opacity:1}100%{transform:translate(6px,84px);opacity:0}}
+
+/* --- light look, night cover, warnings, retro loop ----------------------- */
+html.lightlook .m-forecast .day{text-shadow:none}
+html.lightlook .m-forecast .day svg{filter:none}
+html.lightlook .mapwrap .credit{color:#3b4855; text-shadow:none}
+.nightcover{position:fixed; inset:0; z-index:5000; background:#000; display:none; align-items:center; justify-content:center; color:#9aa6b2;
+            font-family:"Barlow",Arial,sans-serif; font-weight:300; font-size:18vw; font-variant-numeric:tabular-nums}
+.nightcover.on{display:flex}
+.alertbar{position:fixed; left:0; right:0; top:0; z-index:4000; display:none; align-items:center; gap:.6em; padding:.35em 1em;
+          background:#b3261e; color:#fff; font-family:"Barlow",Arial,sans-serif; font-weight:600; font-size:max(14px, 1.6vw); box-shadow:0 .2em .6em rgba(0,0,0,.4)}
+.alertbar.on{display:flex}
+.alertbar.watch{background:#c77700}
+.alertbar.advisory{background:#8a6d00}
+.alertbig{position:fixed; inset:0; z-index:4500; display:none; flex-direction:column; align-items:center; justify-content:center; gap:.4em; text-align:center;
+          background:#5c0f0b; color:#fff; font-family:"Barlow",Arial,sans-serif; padding:4vw}
+.alertbig.on{display:flex}
+.alertbig b{font-size:6vw; font-weight:700; line-height:1.05}
+.alertbig span{font-size:2.4vw; max-width:80vw}
+.retro{position:fixed; inset:0; z-index:4200; display:none; color:#fff; overflow:hidden;
+  font-family:"Barlow Condensed","Arial Narrow",sans-serif; font-weight:600; letter-spacing:.02em; text-shadow:.25vw .25vw 0 #000;
+  background:linear-gradient(180deg,#2b2160 0%,#4a2f6e 30%,#9a5065 70%,#d8783f 100%)}
+.retro.on{display:block}
+.retro .frame{position:absolute; top:0; bottom:0; left:50%; height:100%; aspect-ratio:4/3; max-width:100%; transform:translateX(-50%); container-type:inline-size}
+.retro .rhead{position:absolute; left:0; right:0; top:0; height:17%; background:linear-gradient(100deg,#d8783f 0%,#a14f63 38%,#2b2160 74%)}
+.retro .logo{position:absolute; left:4%; top:3%; width:14%; height:12%; border-radius:1.4cqw; background:linear-gradient(#5a6cf0,#2433b8); box-shadow:0 0 0 .5cqw #c9d0ff,.6cqw .6cqw 0 .5cqw #000; display:grid; place-items:center; font-size:3.2cqw}
+.retro .rtitle{position:absolute; left:21%; top:4%; color:#f4e85c; font-size:4.6cqw; line-height:1.05}
+.retro .rclock{position:absolute; right:4%; top:4.5%; text-align:right; font-size:4cqw; line-height:1.15}
+.retro .rpanel{position:absolute; left:5%; right:5%; top:17%; bottom:15%; background:#384f88; box-shadow:inset 0 0 2.4cqw 1cqw #5c73ad; box-sizing:border-box; font-size:4.4cqw; line-height:1.35}
+.retro .rfoot{position:absolute; left:0; right:0; bottom:0; height:15%; background:#2f4a86; border-top:.3cqw solid #8fa3d6; overflow:hidden; display:flex; align-items:center}
+.retro .crawl{white-space:nowrap; font-size:4.2cqw; padding-left:100%; animation:crawl 30s linear infinite}
+@keyframes crawl{to{transform:translateX(-100%)}}
+.retro .row{display:flex; justify-content:space-between; gap:2cqw}
+.retro .y{color:#f4e85c}
+.retro table{width:100%; border-collapse:collapse; font-size:4cqw; line-height:1.3}
+.retro td{padding:0}
+.retro .pg{position:absolute; inset:3cqw 5cqw; display:none}
+.retro .pg.on{display:block}
 </style>
 </head>
 <body>
@@ -350,15 +420,15 @@ body{
     if(sunny && !(wet && t >= 0.6) && !stormy)                     /* the sun (or moon), peeking over the cloud's shoulder */
       body += '<g transform="translate(-2 -2) scale(.62)" fill="' + warm + '" stroke="' + warm + '">' + (d.night ? moon : '<circle cx="24" cy="24" r="9" stroke="none"/>' +
         '<g stroke-width="3" stroke-linecap="round"><path d="M24 5v6M5 24h6M10.6 10.6l4.2 4.2M10.6 37.4l4.2-4.2M33.2 14.8l4.2-4.2"/></g>') + '</g>';
-    var gray = plain ? one : stormy ? "rgb(96,108,124)" : wet ? ramp(RAIN_GRAY, t) : "rgb(201,209,216)";
+    var gray = plain ? one : stormy ? "rgb(96,108,124)" : wet ? ramp(RAIN_GRAY, t) : (THEME.light ? "rgb(150,162,175)" : "rgb(201,209,216)");
     body += '<path d="M14 34a8 8 0 0 1 .9-15.9A11 11 0 0 1 36 20.5 7 7 0 0 1 35 34z" fill="' + gray + '"/>';
     var count = t < 0.25 ? 1 : t < 0.6 ? 2 : 3, xs = count === 1 ? [25] : count === 2 ? [21, 30] : [17, 25, 33];
     if(stormy) body += '<path transform="translate(8 11.9) scale(.68)" d="M25 34l-6 8h5l-2 6 7-9h-5z" fill="' + warm + '"/>';
-    else if(wet && snowy) body += '<g fill="' + (plain ? one : "rgb(236,243,255)") + '">' + xs.map(function(x){ return '<circle cx="' + (x - 1) + '" cy="39.6" r="2.6"/>'; }).join("") + '</g>';
+    else if(wet && snowy) body += '<g fill="' + (plain ? one : THEME.light ? "rgb(110,135,170)" : "rgb(236,243,255)") + '">' + xs.map(function(x){ return '<circle cx="' + (x - 1) + '" cy="39.6" r="2.6"/>'; }).join("") + '</g>';
     else if(wet) body += '<g stroke="' + blue + '" stroke-width="3" stroke-linecap="round"><path d="' + xs.map(function(x){ return "M" + x + " 36l-2 6"; }).join("") + '"/></g>';
     else if(code >= 45 && code <= 48) body += '<g stroke="' + gray + '" stroke-width="3" stroke-linecap="round"><path d="M9 37.5h30M13 42h22"/></g>';
     return {svg:'<svg viewBox="0 0 48 44" aria-hidden="true">' + body + '</svg>',
-            color: !wet || plain ? "" : snowy && !stormy ? "rgb(236,243,255)" : blue};
+            color: !wet || plain ? "" : snowy && !stormy ? (THEME.light ? "rgb(110,135,170)" : "rgb(236,243,255)") : blue};
   }
   KINDS.forecast = { draw:function(el, m){
     var w = DATA.wx; if(!w){ el.innerHTML = ""; return; }
@@ -410,7 +480,7 @@ body{
       var allow = cal.calendars.map(function(c){ return !Array.isArray(pick) || !tagged || pick.indexOf(tagOf(c)) >= 0; });
       var byDay = {}, order = [];
       cal.events.forEach(function(e){
-        if(e.d < today || e.d > last || allow[e.c] === false) return;
+        if(e.d < today || e.d > last || allow[e.c] === false || calOnlyCountdown(e.c)) return;
         if(!byDay[e.d]){ byDay[e.d] = []; order.push(e.d); }
         byDay[e.d].push(e);
       });
@@ -432,8 +502,12 @@ body{
         byDay[d].forEach(function(e){
           var color = (cal.calendars[e.c] || {}).color || "";
           var past = d === today && e.t && (e.e || e.t) < nowHM;
+          if(past && opt(m, "done", "dim") === "hide") return;
+          var who = null;
+          if(havePeople()){ var fam = famList(), pid = ownerOf(e.c); who = fam.by[pid] || EVERYONE; color = who.col; }
           html += '<div class="ev' + (past ? " past" : "") + '" style="border-left-color:' + esc(color) + '"><span class="when">' +
-                  (e.t ? clock12(e.t) : "All day") + '</span><span class="what">' + esc(e.s) + '</span></div>';
+                  (e.t ? clock12(e.t) : "All day") + '</span><span class="what">' + esc(e.s) + '</span>' +
+                  (who && opt(m, "faces", true) ? '<span class="face" style="background:' + esc(who.col) + '">' + (who.id === "f" ? "⌂" : esc(who.name.charAt(0).toUpperCase())) + '</span>' : "") + '</div>';
         });
         var block = document.createElement("div");
         block.className = "dayblock"; block.innerHTML = html;
@@ -884,6 +958,1359 @@ body{
     unmount:function(){}
   };
 
+
+  /* ================================================= settings ==== */
+  /* The board-wide settings from the Manager's Settings tab, with the choices
+     made in the Weather Picks review as the starting values. */
+  var SETTING_DEFAULTS = {
+    theme:{mode:"sun", look:"paper", fade:10, from:"07:00", to:"20:00"},
+    night:{on:false, mode:"clock", from:"22:00", to:"06:00"},
+    units:{temp:"F", wind:"mph", clock:"12"},
+    textSize:100,
+    retro:{on:true, quietFrom:"22:00", quietTo:"07:00", secs:60},
+    alerts:{banner:true, breakIn:false},
+    burnIn:true,
+    refresh:{weather:15, calendar:10},
+    dates:{weekStart:"sun", style:"short"},
+    stale:{on:true, hours:1},
+    restart:{on:true, at:"03:00"}
+  };
+  function setting(group, key){
+    var s = (CONFIG && CONFIG.settings) || {}, g = s[group], d = SETTING_DEFAULTS[group];
+    if(key === undefined) return g === undefined ? d : g;
+    return g && g[key] !== undefined ? g[key] : d[key];
+  }
+  function hmToMin(s){ var p = String(s || "0:0").split(":"); return (+p[0] || 0) * 60 + (+p[1] || 0); }
+  function minuteOfDay(d){ d = d || new Date(); return d.getHours() * 60 + d.getMinutes(); }
+  function within(m, from, to){ return from <= to ? (m >= from && m < to) : (m >= from || m < to); }
+
+  /* Units: the feeds are asked in °F, mph and inches; °C and km/h are worked out here. */
+  function tU(v){ return v == null || isNaN(v) ? null : setting("units", "temp") === "C" ? (v - 32) * 5 / 9 : v; }
+  function T0(v){ var t = tU(v); return t == null ? "–" : Math.round(t); }
+  function windU(v){ return v == null || isNaN(v) ? "–" : Math.round(setting("units", "wind") === "kmh" ? v * 1.609 : v); }
+  function windUnit(){ return setting("units", "wind") === "kmh" ? "km/h" : "mph"; }
+  function clock24(){ return setting("units", "clock") === "24"; }
+  function hourName(d){ var h = d.getHours(); return clock24() ? h + ":00" : (h % 12 || 12) + (h < 12 ? " AM" : " PM"); }
+  function hm(d){ var h = d.getHours(), m = ("0" + d.getMinutes()).slice(-2); return clock24() ? h + ":" + m : (h % 12 || 12) + ":" + m + (h < 12 ? " AM" : " PM"); }
+  function shortDate(d){ return setting("dates", "style") === "numeric" ? (d.getMonth() + 1) + "/" + d.getDate() : MON[d.getMonth()] + " " + d.getDate(); }
+  var WORDS = {0:"Clear", 1:"Mostly clear", 2:"Partly cloudy", 3:"Cloudy", 45:"Fog", 48:"Fog", 51:"Drizzle", 53:"Drizzle", 55:"Drizzle", 56:"Freezing drizzle",
+    57:"Freezing drizzle", 61:"Light rain", 63:"Rain", 65:"Heavy rain", 66:"Freezing rain", 67:"Freezing rain", 71:"Light snow", 73:"Snow", 75:"Heavy snow",
+    77:"Snow grains", 80:"Showers", 81:"Showers", 82:"Heavy showers", 85:"Snow showers", 86:"Snow showers", 95:"Thunderstorms", 96:"Thunderstorms", 99:"Thunderstorms"};
+  function words(code){ return WORDS[code] || (code >= 95 ? "Thunderstorms" : code >= 71 ? "Snow" : code >= 51 ? "Rain" : "Cloudy"); }
+  function isSnowCode(c){ return (c >= 71 && c <= 77) || c === 85 || c === 86; }
+
+  /* ===================================================== more weather ==== */
+  /* The new weather looks need more than "now and seven days": hours, the next
+     two hours in quarter hours, sixteen days, sunrise and sunset. These come
+     from Open-Meteo whatever source the Weather and Forecast modules use. Each
+     extra feed is asked only when a module on the layout needs it. */
+  var WXKINDS = ["wxnowdays","wxhours","wxcolumns","wxchart","wxten","wxcurve","wind","windcompass","radarloop","windymap","air","pollen","wxrotate"];
+  function onLayout(test){
+    return CONFIG && CONFIG.screens.some(function(sc){ return (sc.modules || []).some(function(m){ return !m.hidden && test(m); }); });
+  }
+  function needs(type){ return onLayout(function(m){ return m.type === type; }); }
+  function wantExtra(){ return onLayout(function(m){ return /^(wxnowdays|wxhours|wxcolumns|wxchart|wxten|wxcurve|windcompass)$/.test(m.type); }) || setting("retro", "on") || setting("theme", "mode") === "sun"; }
+  function home(){ var c = DATA.cal; return c && c.lat != null ? [c.lat, c.lon] : null; }
+  function loadWxExtra(){
+    var h = home(); if(!h || !wantExtra()) return;
+    var u = "https://api.open-meteo.com/v1/forecast?latitude=" + h[0] + "&longitude=" + h[1] +
+      "&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m,is_day,relative_humidity_2m,dew_point_2m,pressure_msl" +
+      "&hourly=temperature_2m,apparent_temperature,weather_code,precipitation_probability,is_day,wind_speed_10m,visibility" +
+      "&minutely_15=precipitation,snowfall&forecast_minutely_15=12" +
+      "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,snowfall_sum,sunrise,sunset,wind_speed_10m_max" +
+      "&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch&timezone=auto&forecast_days=16";
+    getJSON(u).then(function(j){
+      var c = j.current, hr = j.hourly, d = j.daily, mq = j.minutely_15 || {time:[]};
+      var x = {at:Date.now(),
+        now:{temp:c.temperature_2m, feels:c.apparent_temperature, code:c.weather_code, wind:c.wind_speed_10m, deg:c.wind_direction_10m,
+             dir:COMPASS[Math.round(c.wind_direction_10m / 45) % 8], gust:c.wind_gusts_10m, night:!c.is_day, rh:c.relative_humidity_2m,
+             dew:c.dew_point_2m, inhg:c.pressure_msl ? c.pressure_msl * 0.02953 : null},
+        hours:hr.time.map(function(t, i){ return {at:new Date(t).getTime(), temp:hr.temperature_2m[i], feels:hr.apparent_temperature[i], code:hr.weather_code[i],
+             pop:hr.precipitation_probability[i], day:!!hr.is_day[i], wind:hr.wind_speed_10m[i], vis:hr.visibility ? hr.visibility[i] : null}; }),
+        mins:mq.time.map(function(t, i){ return {at:new Date(t).getTime(), amt:(mq.precipitation[i] || 0), snow:(mq.snowfall[i] || 0)}; }),
+        days:d.time.map(function(t, i){ return {date:t, code:d.weather_code[i], hi:d.temperature_2m_max[i], lo:d.temperature_2m_min[i],
+             pop:d.precipitation_probability_max[i], amt:d.precipitation_sum[i] || 0, snow:d.snowfall_sum[i] || 0,
+             rise:d.sunrise[i] ? new Date(d.sunrise[i]).getTime() : null, set:d.sunset[i] ? new Date(d.sunset[i]).getTime() : null,
+             windMax:d.wind_speed_10m_max[i]}; }).filter(function(x){ return x.hi != null; })};
+      DATA.wxx = x; DATA.wxxWhy = "";
+      drawKind.apply(null, WXKINDS);
+    }).catch(function(){ if(!DATA.wxx){ DATA.wxxWhy = "Weather unavailable"; drawKind.apply(null, WXKINDS); } });
+  }
+  /* Normal highs and lows for each date: thirty years of Open-Meteo's history,
+     averaged over the week around the date. Asked once a month at most. */
+  function wantNormals(){ return onLayout(function(m){ return m.type === "wxchart" && (opt(m, "normal", true) || opt(m, "temp", "ribbon") === "normal"); }); }
+  function loadNormals(){
+    var h = home(); if(!h || !wantNormals()) return;
+    var key = "glance-normals-" + h[0].toFixed(1) + "," + h[1].toFixed(1), kept = null;
+    try{ kept = JSON.parse(localStorage.getItem(key) || "null"); }catch(e){}
+    if(kept && Date.now() - kept.at < 30 * 24 * HOUR){ DATA.normals = kept.map; return; }
+    var y = new Date().getFullYear() - 1;
+    getJSON("https://archive-api.open-meteo.com/v1/archive?latitude=" + h[0] + "&longitude=" + h[1] + "&start_date=" + (y - 29) + "-01-01&end_date=" + y +
+            "-12-31&daily=temperature_2m_max,temperature_2m_min&temperature_unit=fahrenheit&timezone=auto", true).then(function(j){
+      var sum = {}, d = j.daily;
+      d.time.forEach(function(t, i){
+        var hi = d.temperature_2m_max[i], lo = d.temperature_2m_min[i]; if(hi == null || lo == null) return;
+        var base = parseDay(t);
+        for(var k = -3; k <= 3; k++){ var x = new Date(base.getTime() + k * 24 * HOUR), md = (x.getMonth() + 1) + "-" + x.getDate();
+          var s = sum[md] || (sum[md] = [0, 0, 0]); s[0] += hi; s[1] += lo; s[2]++; }
+      });
+      var map = {}; Object.keys(sum).forEach(function(md){ var s = sum[md]; map[md] = [s[0] / s[2], s[1] / s[2]]; });
+      DATA.normals = map;
+      try{ localStorage.setItem(key, JSON.stringify({at:Date.now(), map:map})); }catch(e){}
+      drawKind("wxchart");
+    }).catch(function(){});
+  }
+  function normalFor(date){ var d = parseDay(date), n = DATA.normals && DATA.normals[(d.getMonth() + 1) + "-" + d.getDate()]; return n || null; }
+  /* How sure the forecast is: the spread between the 31 runs of the American
+     ensemble for each day's high. A narrow spread is a sure forecast. */
+  function wantSpread(){ return onLayout(function(m){ return m.type === "wxchart" && opt(m, "rowSure", false); }); }
+  function loadSpread(){
+    var h = home(); if(!h || !wantSpread()) return;
+    getJSON("https://ensemble-api.open-meteo.com/v1/ensemble?latitude=" + h[0] + "&longitude=" + h[1] + "&hourly=temperature_2m&models=gfs_seamless&forecast_days=16&temperature_unit=fahrenheit&timezone=auto").then(function(j){
+      var hr = j.hourly, keys = Object.keys(hr).filter(function(k){ return /^temperature_2m/.test(k); }), byDay = {};
+      hr.time.forEach(function(t, i){
+        var day = t.slice(0, 10), vals = keys.map(function(k){ return hr[k][i]; }).filter(function(v){ return v != null; });
+        if(vals.length < 5) return;
+        var mean = vals.reduce(function(a, b){ return a + b; }, 0) / vals.length;
+        var sd = Math.sqrt(vals.reduce(function(a, b){ return a + (b - mean) * (b - mean); }, 0) / vals.length);
+        (byDay[day] = byDay[day] || []).push(sd);
+      });
+      var out = {}; Object.keys(byDay).forEach(function(day){ var a = byDay[day], sd = a.reduce(function(x, y){ return x + y; }, 0) / a.length;
+        out[day] = Math.max(5, Math.min(99, Math.round(100 - sd * 9))); });
+      DATA.spread = out; drawKind("wxchart");
+    }).catch(function(){});
+  }
+  function loadAir(){
+    var h = home(); if(!h || !needs("air")) return;
+    getJSON("https://air-quality-api.open-meteo.com/v1/air-quality?latitude=" + h[0] + "&longitude=" + h[1] + "&current=us_aqi,pm2_5,ozone&hourly=us_aqi&forecast_days=5&timezone=auto").then(function(j){
+      var by = {}, order = [];
+      j.hourly.time.forEach(function(t, i){ var d = t.slice(0, 10), v = j.hourly.us_aqi[i]; if(v == null) return;
+        if(!(d in by)){ by[d] = 0; order.push(d); } by[d] = Math.max(by[d], v); });
+      DATA.air = {aqi:j.current.us_aqi, pm25:j.current.pm2_5, o3:j.current.ozone, days:order.slice(0, 5).map(function(d){ return {date:d, aqi:by[d]}; })};
+      drawKind("air");
+    }).catch(function(){ if(!DATA.air){ DATA.airWhy = "Air quality unavailable"; drawKind("air"); } });
+  }
+  function loadPollen(){
+    var h = home(), key = ((CONFIG.weather || {}).keys || {}).googlepollen; if(!h || !needs("pollen")) return;
+    if(!key){ DATA.pollenWhy = "Pollen needs a Google Pollen key (Manager, Weather tab)"; drawKind("pollen"); return; }
+    getJSON("https://pollen.googleapis.com/v1/forecast:lookup?key=" + encodeURIComponent(key) + "&location.latitude=" + h[0].toFixed(2) + "&location.longitude=" + h[1].toFixed(2) + "&days=5", true).then(function(j){
+      DATA.pollen = (j.dailyInfo || []).map(function(d){
+        var t = {}; (d.pollenTypeInfo || []).forEach(function(p){ t[p.code] = {season:p.inSeason !== false && !!p.indexInfo, v:p.indexInfo ? p.indexInfo.value : 0, cat:p.indexInfo ? p.indexInfo.category : "None"}; });
+        return {date:d.date ? d.date.year + "-" + ("0" + d.date.month).slice(-2) + "-" + ("0" + d.date.day).slice(-2) : "", types:t}; });
+      DATA.pollenWhy = ""; drawKind("pollen");
+    }).catch(function(){ DATA.pollenWhy = "Pollen did not answer (check the key)"; drawKind("pollen"); });
+  }
+  /* The Weather Service, for warnings, nearby observations, the written
+     forecast and the nearest radar station. The point is asked once. */
+  var NWSPOINT = null;
+  function nwsPoint(){
+    var h = home(); if(!h) return Promise.reject(new Error("no place"));
+    if(NWSPOINT && NWSPOINT.key === h.join()) return Promise.resolve(NWSPOINT);
+    return getJSON("https://api.weather.gov/points/" + (+h[0]).toFixed(4) + "," + (+h[1]).toFixed(4), true).then(function(p){
+      NWSPOINT = {key:h.join(), props:p.properties}; return NWSPOINT; });
+  }
+  function loadAlerts(){
+    var h = home(); if(!h || !(setting("alerts", "banner") || setting("alerts", "breakIn"))){ showAlerts([]); return; }
+    getJSON("https://api.weather.gov/alerts/active?point=" + (+h[0]).toFixed(4) + "," + (+h[1]).toFixed(4), true).then(function(j){
+      showAlerts((j.features || []).map(function(f){ var p = f.properties; return {id:p.id || f.id, event:p.event, head:p.headline || p.event, ends:p.ends || p.expires, sev:p.severity}; }));
+    }).catch(function(){});
+  }
+  /* "Minneapolis, Crystal Airport" reads CRYSTAL and "St. Cloud Regional
+     Airport" reads ST. CLOUD: the part of a station's name that tells it apart. */
+  function stationName(n){
+    var parts = String(n || "").split(/\s*[,\/]\s*|\s+-\s+/).map(function(p){
+      return p.replace(/\b(Regional|Municipal|International|Intl|Airport|Arpt|Field|Executive|Airfield)\b/gi, "").replace(/\s+/g, " ").trim(); }).filter(Boolean);
+    var pick = parts.length > 1 ? parts[parts.length - 1] : (parts[0] || "");
+    return pick.toUpperCase().slice(0, 16);
+  }
+  function loadRetroData(){
+    if(!setting("retro", "on")) return;
+    nwsPoint().then(function(pt){
+      var pr = pt.props;
+      getJSON(pr.forecast, true).then(function(f){ DATA.nwsText = f.properties.periods.slice(0, 3).map(function(p){ return {name:p.name, text:p.detailedForecast}; }); }).catch(function(){});
+      getJSON(pr.observationStations, true).then(function(s){
+        var list = (s.features || []).slice(0, 8);
+        return Promise.all(list.map(function(st){
+          return getJSON(st.id + "/observations/latest", true).then(function(o){ var p = o.properties;
+            return {name:stationName(st.properties.name),
+                    temp:p.temperature && p.temperature.value != null ? p.temperature.value * 9 / 5 + 32 : null, sky:String(p.textDescription || "").toUpperCase().slice(0, 12),
+                    dir:p.windDirection && p.windDirection.value != null ? COMPASS[Math.round(p.windDirection.value / 45) % 8] : "",
+                    wind:p.windSpeed && p.windSpeed.value != null ? p.windSpeed.value * 0.621371 : null}; }).catch(function(){ return null; });
+        }));
+      }).then(function(obs){ var seen = {};   /* one row per place */
+        DATA.nwsObs = (obs || []).filter(function(o){ if(!o || o.temp == null || seen[o.name]) return false; seen[o.name] = true; return true; }); }).catch(function(){});
+    }).catch(function(){});
+  }
+
+  /* ================================================ drawing kit ==== */
+  /* The new weather looks are pictures with fixed proportions that scale to
+     fit their box. Colors come from the page's palette, so the light look and
+     a module's own color reach them too. */
+  var UID = 0; function uid(p){ return (p || "g") + (++UID); }
+  function TX(x, y, txt, o){ o = o || {};
+    return '<text x="' + (+x).toFixed(1) + '" y="' + (+y).toFixed(1) + '" style="fill:' + (o.c || "var(--ink)") + '" font-size="' + (+(o.s || 14)).toFixed(1) +
+      '" font-weight="' + (o.w || 400) + '" text-anchor="' + (o.a || "middle") + '"' + (o.ls ? ' letter-spacing="' + o.ls + '"' : "") + '>' + txt + '</text>'; }
+  function RECT(x, y, w, h, r, fill, extra){ return '<rect x="' + (+x).toFixed(1) + '" y="' + (+y).toFixed(1) + '" width="' + Math.max(0, w).toFixed(1) + '" height="' + Math.max(0, h).toFixed(1) +
+      '" rx="' + (r || 0) + '" style="fill:' + fill + '"' + (extra || "") + '/>'; }
+  function wxsvg(W, H, body, label){ return '<svg class="wxs" viewBox="0 0 ' + W + ' ' + Math.round(H) + '" preserveAspectRatio="xMidYMid meet" role="img" aria-label="' + esc(label) + '">' + body + '</svg>'; }
+  /* A sky picture from the forecast's own drawing (dayIcon), placed at x,y. */
+  function sky(code, x, y, size, o){ o = o || {};
+    var pic = dayIcon({code:code, pop:o.pop == null ? null : o.pop, amt:o.amt || 0, hi:o.hi == null ? null : o.hi, cloud:null, night:!!o.night,
+                       t:o.pop == null ? (NOW_STRENGTH[code] == null ? .45 : NOW_STRENGTH[code]) : undefined}, !!o.plain);
+    var w = size, h = size * 44 / 48;
+    return pic.svg.replace('<svg viewBox="0 0 48 44" aria-hidden="true">', '<svg x="' + (x - w / 2).toFixed(1) + '" y="' + (y - h / 2).toFixed(1) + '" width="' + w.toFixed(1) + '" height="' + h.toFixed(1) + '" viewBox="0 0 48 44" style="color:var(--warm)">');
+  }
+  function sunsetPic(x, y, size){ var s = size / 40;
+    return '<g transform="translate(' + (x - size / 2).toFixed(1) + ',' + (y - size / 2).toFixed(1) + ') scale(' + s.toFixed(3) + ')" style="fill:var(--warm);stroke:var(--warm)">' +
+      '<path d="M9 26 a11 11 0 0 1 22 0z" stroke="none"/><line x1="4" y1="27" x2="36" y2="27" stroke-width="2.2" stroke-linecap="round"/>' +
+      '<path d="M20 30 v7 m-4 -4 l4 4 l4 -4" stroke-width="2.2" fill="none" stroke-linecap="round"/></g>'; }
+  function chipS(x, y, w, txt, bg, ink, s){ return RECT(x - w / 2, y - 13, w, 25, 4, bg) + TX(x, y + 5, txt, {c:ink, s:s || 14, w:600}); }
+  function smooth(p, lo, hi){ function k(v){ return lo == null ? v : Math.max(lo, Math.min(hi, v)); } var d = "M" + p[0][0].toFixed(1) + " " + p[0][1].toFixed(1);
+    for(var i = 0; i < p.length - 1; i++){ var p0 = p[i - 1] || p[i], p1 = p[i], p2 = p[i + 1], p3 = p[i + 2] || p2;
+      d += " C" + (p1[0] + (p2[0] - p0[0]) / 6).toFixed(1) + " " + k(p1[1] + (p2[1] - p0[1]) / 6).toFixed(1) + " " + (p2[0] - (p3[0] - p1[0]) / 6).toFixed(1) + " " +
+           k(p2[1] - (p3[1] - p1[1]) / 6).toFixed(1) + " " + p2[0].toFixed(1) + " " + p2[1].toFixed(1); }
+    return d; }
+  var TSTOPS = [[0,"#3a3fbf"],[10,"#2f6fe0"],[20,"#2aa6e8"],[30,"#34c3b0"],[40,"#7fd04a"],[50,"#f2c94c"],[60,"#f08a2a"],[80,"#e2564a"],[100,"#b3261e"]];
+  function hexRGB(c){ return [parseInt(c.substr(1, 2), 16), parseInt(c.substr(3, 2), 16), parseInt(c.substr(5, 2), 16)]; }
+  function tcol(t){ t = Math.max(0, Math.min(100, t));
+    for(var i = 0; i < TSTOPS.length - 1; i++){ var a = TSTOPS[i], b = TSTOPS[i + 1];
+      if(t <= b[0]){ var f = (t - a[0]) / (b[0] - a[0]), A = hexRGB(a[1]), B = hexRGB(b[1]);
+        return "rgb(" + A.map(function(v, k){ return Math.round(v + (B[k] - v) * f); }).join(",") + ")"; } }
+    return TSTOPS[TSTOPS.length - 1][1]; }
+  function tgrad(id, Y){ return '<defs><linearGradient id="' + id + '" gradientUnits="userSpaceOnUse" x1="0" x2="0" y1="' + Y(0).toFixed(1) + '" y2="' + Y(100).toFixed(1) + '">' +
+    TSTOPS.map(function(s){ return '<stop offset="' + (s[0] / 100).toFixed(3) + '" stop-color="' + s[1] + '"/>'; }).join("") + '</linearGradient></defs>'; }
+  function quietBox(el, why){ el.classList.remove("wxbox"); el.innerHTML = '<div class="quiet">' + esc(why) + '</div>'; }
+  function wxNeed(el){ var x = DATA.wxx; if(!x){ quietBox(el, DATA.wxxWhy || (home() ? "Weather loading" : (DATA.wxWhy || "Weather loading"))); return null; } el.classList.add("wxbox"); return x; }
+  function dayLabel(date, i, upper){ var d = parseDay(date), t = i === 0 ? "Today" : DAYS[d.getDay()].slice(0, 3); return upper ? t.toUpperCase() : t; }
+  function isWknd(date){ var g = parseDay(date).getDay(); return g === 0 || g === 6; }
+  var PANEL = "var(--panel)", PANEL2 = "var(--panel2)";
+
+  /* -------------------------------------------- Now + days ---- */
+  KINDS.wxnowdays = { every:MIN, draw:function(el, m){
+    var x = wxNeed(el); if(!x) return;
+    var n = Math.max(2, Math.min(7, +opt(m, "days", 4) || 4)), now = x.now;
+    var b = '<circle cx="190" cy="180" r="128" style="fill:' + PANEL + '"/>' + sky(now.code, 190, 108, 84, {night:now.night}) +
+      TX(190, 205, T0(now.temp) + "°", {s:64, w:500}) + TX(190, 236, words(now.code).toUpperCase(), {s:17, ls:1.5});
+    if(opt(m, "feels", true)) b += TX(190, 262, "Feels " + T0(now.feels) + "° · " + now.dir + " " + windU(now.wind) + " " + windUnit(), {s:13, c:"var(--ink-3)"});
+    var top = 44, bot = 318, sp = (bot - top) / n, r = Math.min(27, sp / 2 - 3), fs = Math.min(22, sp * .4);
+    for(var i = 0; i < n && i < x.days.length; i++){ var y = top + sp * (i + .5), d = x.days[i];
+      b += TX(400, y + fs * .32, dayLabel(d.date, i, true), {a:"start", s:Math.min(20, fs), w:600}) + '<circle cx="505" cy="' + y.toFixed(1) + '" r="' + r.toFixed(1) + '" style="fill:' + PANEL + '"/>' +
+        sky(d.code, 505, y, r * 1.5, {pop:d.pop, amt:d.amt, hi:d.hi}) + TX(552, y + fs * .32, T0(d.lo) + "° / " + T0(d.hi) + "°", {a:"start", s:fs, w:500}); }
+    var H = 340;
+    if(opt(m, "clock", true)){ var t = new Date(); b += '<line x1="40" y1="330" x2="680" y2="330" style="stroke:var(--line)"/>' + TX(40, 362, hm(t) + " · " + DAYS[t.getDay()] + ", " + shortDate(t), {a:"start", s:15, c:"var(--ink-3)"}); H = 380; }
+    el.innerHTML = wxsvg(720, H, b, "Current weather with " + n + " days of lows and highs");
+  }};
+
+  /* -------------------------------------------- Next hours ---- */
+  KINDS.wxhours = { every:5 * MIN, draw:function(el, m){
+    var x = wxNeed(el); if(!x) return;
+    var n = Math.max(3, Math.min(8, +opt(m, "slots", 7) || 7)), step = Math.max(1, Math.min(3, +opt(m, "step", 1) || 1));
+    var start = new Date(); start.setMinutes(0, 0, 0);
+    var hours = x.hours.filter(function(h){ return h.at >= start.getTime(); }), slots = [];
+    for(var k = 0; k < n && k * step < hours.length; k++){ var h = hours[k * step]; slots.push({at:h.at, lab:hourName(new Date(h.at)), h:h}); }
+    if(opt(m, "sun", true) && slots.length > 1){
+      var a = slots[0].at, z = slots[slots.length - 1].at;
+      x.days.forEach(function(d){ [["rise", "Sunrise"], ["set", "Sunset"]].forEach(function(s){ var t = d[s[0]];
+        if(t && t > a && t < z){ var i = 0; while(i < slots.length && slots[i].at < t) i++; slots.splice(i, 0, {at:t, lab:hm(new Date(t)).replace(/ (AM|PM)$/, ""), sun:s[1]}); } }); });
+    }
+    var N = slots.length, w = 680 / N, ic = Math.min(64, w - 18), big = Math.min(32, w * .27), sm = Math.min(15, w * .14), b = "";
+    slots.forEach(function(s, i){ var cx = 20 + w * (i + .5);
+      b += chipS(cx, 34, Math.min(86, w - 8), s.lab, s.sun ? "var(--warm)" : "var(--chip)", s.sun ? "var(--chipSunInk)" : "var(--chipInk)", Math.min(14, w * .16));
+      if(s.sun){ b += sunsetPic(cx, 92, ic * .8) + TX(cx, 160, s.sun, {s:Math.min(22, w * .2), w:600}); return; }
+      b += sky(s.h.code, cx, 92, ic, {pop:s.h.pop, night:!s.h.day}) + TX(cx, 160, T0(s.h.temp) + "°", {s:big, w:600});
+      if(opt(m, "feels", true)) b += TX(cx, 186, T0(s.h.feels) + "°", {s:Math.min(18, w * .16), c:"var(--ink-3)"});
+      if(opt(m, "words", true)) b += TX(cx, 212, words(s.h.code), {s:sm}); });
+    el.innerHTML = wxsvg(720, 226, b, "The next " + n + " hours with temperature, feels-like and condition");
+  }};
+
+  /* ---------------------------------- Now panel + day columns ---- */
+  KINDS.wxcolumns = { every:5 * MIN, draw:function(el, m){
+    var x = wxNeed(el); if(!x) return;
+    var n = Math.max(3, Math.min(7, +opt(m, "days", 5) || 5)), now = x.now, days = x.days.slice(0, n);
+    var b = RECT(0, 0, 720, 200, 0, PANEL) + sky(now.code, 80, 100, 96, {night:now.night}) + TX(140, 128, T0(now.temp) + "°", {a:"start", s:76, w:500}) +
+      TX(290, 80, words(now.code), {a:"start", s:24, w:500}) + TX(290, 106, "Feels like " + T0(now.feels) + "°", {a:"start", s:16, c:"var(--ink-3)"});
+    if(opt(m, "strip", true)){
+      var mins = x.mins.filter(function(q){ return q.at >= Date.now() - 15 * MIN; }).slice(0, 8), wet = mins.map(function(q){ return q.amt > 0.001; });
+      var snowy = mins.some(function(q){ return q.snow > 0; }) || isSnowCode(now.code), what = snowy ? "Snow" : "Rain", say;
+      var first = wet.indexOf(true), last = wet.lastIndexOf(true);
+      if(first < 0) say = "No rain or snow for 2 hours";
+      else if(first === 0 && last < wet.length - 1) say = what + " ending in " + ((last + 1) * 15) + " minutes";
+      else if(first === 0) say = what + " for the next 2 hours";
+      else say = what + " starting in " + (first * 15) + " minutes";
+      b += TX(290, 136, say, {a:"start", s:16});
+      var mx = Math.max(0.02, Math.max.apply(null, mins.map(function(q){ return q.amt; }).concat([0])));
+      mins.forEach(function(q, i){ var hh = q.amt > 0.001 ? 4 + 22 * q.amt / mx : 2; b += RECT(290 + i * 50, 176 - hh, 42, hh, 2, q.amt > 0.001 ? (snowy ? "var(--snowc)" : "var(--rain)") : "var(--line-2)"); });
+      b += TX(290, 192, "Now", {a:"start", s:11, c:"var(--ink-3)"}) + TX(690, 192, "+2 hr", {a:"end", s:11, c:"var(--ink-3)"});
+    }
+    var cw = 700 / n, top = 246, pts = [], lpts = [], i, cx;
+    var hs = days.map(function(d){ return d.hi; }), ls = days.map(function(d){ return d.lo; });
+    var hmin = Math.min.apply(null, hs), hmax = Math.max.apply(null, hs), lmin = Math.min.apply(null, ls), lmax = Math.max.apply(null, ls);
+    var fs = Math.min(22, cw * .2), ic = Math.min(52, cw * .44), H = 590 + (opt(m, "night", true) ? 30 : 0) + (opt(m, "chance", true) ? 34 : 0);
+    for(i = 0; i < days.length; i++){ cx = 10 + cw * (i + .5); var d = days[i], dt = parseDay(d.date);
+      var yh = 430 - (d.hi - hmin) / ((hmax - hmin) || 1) * 46, yl = 520 - (d.lo - lmin) / ((lmax - lmin) || 1) * 46;
+      b += RECT(cx - cw / 2 + 6, 216, cw - 12, H - 226, 10, i === 0 ? PANEL2 : PANEL) + TX(cx, top, DAYS[dt.getDay()].charAt(0), {s:15, c:"var(--ink-3)"}) +
+        '<circle cx="' + cx.toFixed(1) + '" cy="' + (top + 24) + '" r="15" style="fill:' + (i === 0 ? "var(--ink)" : "none") + ';stroke:var(--ink-3)"/>' +
+        TX(cx, top + 29, dt.getDate(), {s:14, w:600, c:i === 0 ? "var(--bg)" : "var(--ink)"}) + sky(d.code, cx, top + 76, ic, {pop:d.pop, amt:d.amt, hi:d.hi});
+      pts.push([cx, yh]); lpts.push([cx, yl]); }
+    b += '<polyline points="' + pts.map(function(p){ return p[0].toFixed(1) + "," + p[1].toFixed(1); }).join(" ") + '" style="fill:none;stroke:var(--ink)" stroke-width="2"/>';
+    b += '<polyline points="' + lpts.map(function(p){ return p[0].toFixed(1) + "," + p[1].toFixed(1); }).join(" ") + '" style="fill:none;stroke:var(--ink-3)" stroke-width="2" stroke-dasharray="3 4"/>';
+    for(i = 0; i < days.length; i++){ cx = pts[i][0]; var dd = days[i], y = 586;
+      b += '<circle cx="' + cx.toFixed(1) + '" cy="' + pts[i][1].toFixed(1) + '" r="4" style="fill:var(--ink)"/>' + TX(cx, pts[i][1] - 12, T0(dd.hi) + "°", {s:fs, w:600}) +
+        '<circle cx="' + cx.toFixed(1) + '" cy="' + lpts[i][1].toFixed(1) + '" r="4" style="fill:var(--ink-3)"/>' + TX(cx, lpts[i][1] + 26, T0(dd.lo) + "°", {s:fs * .9, c:"var(--ink-3)"});
+      if(opt(m, "night", true)){ var nt = x.hours.filter(function(q){ return new Date(q.at).getHours() === 22 && isoDay(new Date(q.at)) === dd.date; })[0];
+        b += sky(nt ? nt.code : 0, cx, y, Math.min(34, cw * .3), {night:true, pop:nt ? nt.pop : 0}); y += 30; }
+      if(opt(m, "chance", true)) b += TX(cx, y + 26, (dd.pop == null ? "–" : Math.round(dd.pop)) + "%", {s:15, c:"var(--rain)"}); }
+    el.innerHTML = wxsvg(720, H, b, "Current conditions, then " + n + " day columns with highs and lows joined by lines");
+  }};
+
+  /* -------------------------------------------- Ten-day chart ---- */
+  function geo(n){ var x0 = 46, x1 = 710, cw = (x1 - x0) / n; return {n:n, x0:x0, x1:x1, cw:cw, cx:function(i){ return x0 + cw * (i + .5); }}; }
+  function dayRow(g, y, days){ var b = "";
+    days.forEach(function(d, i){ var x = g.cx(i), c = isWknd(d.date) ? "var(--over)" : "var(--ink)";
+      b += TX(x, y, dayLabel(d.date, i), {s:Math.min(16, g.cw * .25), w:600, c:c}) + TX(x, y + 16, shortDate(parseDay(d.date)), {s:Math.min(12, g.cw * .2), c:isWknd(d.date) ? "var(--over)" : "var(--ink-3)"}); });
+    return b; }
+  function grid(Y, vals, fmt){ return vals.map(function(t){ var y = Y(t).toFixed(1);
+    return '<line x1="46" x2="710" y1="' + y + '" y2="' + y + '" style="stroke:var(--line)"/>' + TX(40, Y(t) + 4, fmt ? fmt(t) : T0(t) + "°", {a:"end", s:11, c:"var(--ink-3)"}); }).join(""); }
+  function amtText(d){ if(!d.amt || d.amt < 0.005) return "—"; if(d.snow > 0.05 || isSnowCode(d.code)) return Math.max(1, Math.round(d.snow || d.amt * 10)) + " in snow"; return d.amt.toFixed(2) + " in"; }
+  function chartTop(m, g, days){
+    var b = "", y = 6, cw = g.cw;
+    if(opt(m, "rowDates", true)){ b += dayRow(g, y + 18, days); y += 40; }
+    if(opt(m, "rowIcons", true)){ b += RECT(g.x0, y, g.x1 - g.x0, 54, 10, "var(--band)");
+      days.forEach(function(d, i){ b += sky(d.code, g.cx(i), y + 27, Math.min(44, cw - 10), {pop:d.pop, amt:d.amt, hi:d.hi}); }); y += 62; }
+    function chips(key, col, lab){ b += TX(g.x0 - 6, y + 17, lab, {a:"end", s:10, c:"var(--ink-3)"});
+      days.forEach(function(d, i){ var x = g.cx(i); b += RECT(x - cw / 2 + 4, y, cw - 8, 26, 5, col) + TX(x, y + 18, T0(d[key]) + "°", {s:Math.min(15, cw * .3), w:600, c:"#fff"}); }); y += 32; }
+    if(opt(m, "rowHi", true)) chips("hi", "#1f8a52", "High");
+    if(opt(m, "rowLo", true)) chips("lo", "#2d7fc2", "Low");
+    if(opt(m, "rowPop", false)){ b += TX(g.x0 - 6, y + 14, "Chance", {a:"end", s:10, c:"var(--ink-3)"});
+      days.forEach(function(d, i){ b += TX(g.cx(i), y + 15, (d.pop == null ? "–" : Math.round(d.pop)) + "%", {s:13, w:600, c:d.pop >= 50 ? "var(--rain)" : "var(--ink-3)"}); }); y += 24; }
+    if(opt(m, "rowSure", false)){ y += 4; b += TX(g.x0 - 6, y + 6, "Sure", {a:"end", s:10, c:"var(--ink-3)"});
+      days.forEach(function(d, i){ var x = g.cx(i), bw = Math.min(46, cw - 12), s = DATA.spread && DATA.spread[d.date];
+        b += RECT(x - bw / 2, y, bw, 5, 2.5, "var(--line-2)") + (s ? RECT(x - bw / 2, y, bw * s / 100, 5, 2.5, "var(--ink)") : "") + TX(x, y + 20, s ? s + "%" : "–", {s:10, c:"var(--ink-3)"}); });
+      y += 28; }
+    return {h:y, body:b};
+  }
+  function chartTemp(m, g, days){
+    var style = opt(m, "temp", "ribbon"); if(style === "none") return {h:0, body:""};
+    var nums = opt(m, "chartNums", false), showNormal = opt(m, "normal", true), showNow = opt(m, "today", true), x = DATA.wxx;
+    var norms = days.map(function(d){ return normalFor(d.date); }), haveN = norms.every(Boolean), b = "", i;
+    if(style === "normal"){
+      if(!haveN) return {h:40, body:TX(360, 26, "Normal temperatures loading", {s:13, c:"var(--ink-3)"})};
+      var zero = 96, sc = 5.4, an = days.map(function(d, i){ return (d.hi + d.lo) / 2 - (norms[i][0] + norms[i][1]) / 2; }), pts = an.map(function(a, i){ return [g.cx(i), zero - Math.max(-14, Math.min(16, a)) * sc]; });
+      var a = uid("ab"), c = uid("bl"), area = smooth(pts) + " L" + g.cx(days.length - 1).toFixed(1) + " " + zero + " L" + g.cx(0).toFixed(1) + " " + zero + " Z", H = 186 + (nums ? 22 : 0);
+      b += '<defs><clipPath id="' + a + '"><rect x="0" y="0" width="720" height="' + zero + '"/></clipPath><clipPath id="' + c + '"><rect x="0" y="' + zero + '" width="720" height="' + (H - zero) + '"/></clipPath></defs>' +
+        '<path d="' + area + '" style="fill:#f08a2a" opacity=".85" clip-path="url(#' + a + ')"/><path d="' + area + '" style="fill:#3f8fe8" opacity=".85" clip-path="url(#' + c + ')"/>' +
+        '<line x1="46" x2="710" y1="' + zero + '" y2="' + zero + '" style="stroke:var(--ink)" stroke-opacity=".6" stroke-dasharray="4 4"/>' + TX(40, zero + 4, "normal", {a:"end", s:10, c:"var(--ink-3)"}) +
+        '<path d="' + smooth(pts) + '" style="fill:none;stroke:var(--ink)" stroke-width="2"/>';
+      an.forEach(function(v, i){ var r = Math.round(setting("units", "temp") === "C" ? v * 5 / 9 : v), up = v >= 0;
+        b += TX(g.cx(i), pts[i][1] + (up ? -10 : 20), (r > 0 ? "+" : r < 0 ? "−" : "") + Math.abs(r) + "°", {s:14, w:600, c:up ? "#e07a1f" : "#3f8fe8"});
+        if(nums) b += TX(g.cx(i), 200, T0(days[i].hi) + "° / " + T0(days[i].lo) + "°", {s:11, c:"var(--ink-3)"}); });
+      return {h:H, body:b};
+    }
+    var top = 26, bot = top + 180, all = [];
+    days.forEach(function(d, i){ all.push(d.hi, d.lo); if(haveN && showNormal) all.push(norms[i][0], norms[i][1]); });
+    var lo = Math.floor((Math.min.apply(null, all) - 4) / 10) * 10, hi = Math.ceil((Math.max.apply(null, all) + 4) / 10) * 10;
+    function Y(t){ return bot - (t - lo) / ((hi - lo) || 1) * (bot - top); }
+    var id = uid("tg"), ticks = []; for(var t = lo; t <= hi; t += (hi - lo > 50 ? 20 : 10)) ticks.push(t);
+    b += tgrad(id, Y) + grid(Y, ticks);
+    if(haveN && showNormal){
+      var nu = norms.map(function(n, i){ return [g.cx(i), Y(n[0])]; }), nd = norms.map(function(n, i){ return [g.cx(i), Y(n[1])]; });
+      if(style === "capsules") b += '<path d="' + smooth(nu) + ' ' + smooth(nd.slice().reverse()).replace(/^M/, "L") + ' Z" style="fill:var(--ink)" opacity=".08"/>' + TX(710, top - 8, "gray band: normal range", {a:"end", s:10, c:"var(--ink-3)"});
+      else b += '<path d="' + smooth(nu) + '" style="fill:none;stroke:var(--ink-3)" stroke-width="1.4" stroke-dasharray="5 5"/><path d="' + smooth(nd) + '" style="fill:none;stroke:var(--ink-3)" stroke-width="1.4" stroke-dasharray="5 5"/>' +
+        TX(710, top - 8, "dashed: normal high and low", {a:"end", s:10, c:"var(--ink-3)"});
+    }
+    if(style === "capsules"){
+      days.forEach(function(d, i){ var cx = g.cx(i), yh = Y(d.hi), yl = Y(d.lo);
+        b += '<rect x="' + (cx - 11).toFixed(1) + '" y="' + yh.toFixed(1) + '" width="22" height="' + Math.max(4, yl - yh).toFixed(1) + '" rx="11" fill="url(#' + id + ')"/>';
+        if(nums){ b += TX(cx, yh - 9, T0(d.hi) + "°", {s:14, w:600}) + TX(cx, yl + 19, T0(d.lo) + "°", {s:13, c:"var(--ink-2)"}); } });
+    } else {
+      var up = days.map(function(d, i){ return [g.cx(i), Y(d.hi)]; }), dn = days.map(function(d, i){ return [g.cx(i), Y(d.lo)]; });
+      b += '<path d="' + smooth(up) + ' ' + smooth(dn.slice().reverse()).replace(/^M/, "L") + ' Z" fill="url(#' + id + ')" opacity=".9"/>' +
+        '<path d="' + smooth(up) + '" style="fill:none;stroke:var(--ink)" stroke-width="2.6"/><path d="' + smooth(dn) + '" style="fill:none;stroke:var(--ink-3)" stroke-width="1.6"/>';
+      if(nums) days.forEach(function(d, i){ b += TX(g.cx(i), Y(d.hi) - 10, T0(d.hi) + "°", {s:14, w:600}) + TX(g.cx(i), Y(d.lo) + 20, T0(d.lo) + "°", {s:13, c:"var(--ink-2)"}); });
+    }
+    if(showNow && x){ var nx = g.cx(0), ny = Y(x.now.temp);
+      b += '<line x1="' + nx.toFixed(1) + '" x2="' + nx.toFixed(1) + '" y1="' + top + '" y2="' + bot + '" style="stroke:var(--ink)" stroke-opacity=".35" stroke-dasharray="2 4"/>' +
+        '<circle cx="' + nx.toFixed(1) + '" cy="' + ny.toFixed(1) + '" r="6" style="fill:var(--ink);stroke:var(--bg)" stroke-width="3"/>' +
+        '<text x="' + (nx + 13).toFixed(1) + '" y="' + (ny + 4).toFixed(1) + '" style="fill:var(--ink);stroke:var(--bg)" stroke-width="3" paint-order="stroke" font-size="11" font-weight="600">now</text>'; }
+    return {h:bot + 12, body:b};
+  }
+  function dropPath(x, y){ return "M" + x + " " + (y - 32) + " C" + (x + 6) + " " + (y - 18) + " " + (x + 22) + " " + (y - 4) + " " + (x + 22) + " " + (y + 10) + " A22 22 0 0 1 " + (x - 22) + " " + (y + 10) +
+    " C" + (x - 22) + " " + (y - 4) + " " + (x - 6) + " " + (y - 18) + " " + x + " " + (y - 32) + " Z"; }
+  function chartWet(m, g, days){
+    var style = opt(m, "precip", "drops"); if(style === "none") return {h:0, body:""};
+    var showC = opt(m, "chance", true), showA = opt(m, "amount", true), b = "", y;
+    function snowy(d){ return d.snow > 0.05 || isSnowCode(d.code); }
+    if(style === "drops"){ var cy = 42;
+      days.forEach(function(d, i){ var x = +g.cx(i).toFixed(1), sn = snowy(d), lv = (d.pop || 0) / 100, id = uid("dc");
+        var shp = sn ? '<circle cx="' + x + '" cy="' + (cy + 4) + '" r="' + Math.min(25, g.cw / 2 - 4) + '"' : '<path d="' + dropPath(x, cy) + '"', t0 = sn ? cy - 21 : cy - 32, t1 = sn ? cy + 29 : cy + 32, hh = (t1 - t0) * lv;
+        b += '<clipPath id="' + id + '"><rect x="' + (x - 30) + '" y="' + (t1 - hh).toFixed(1) + '" width="60" height="' + hh.toFixed(1) + '"/></clipPath>' +
+          shp + ' style="fill:' + PANEL2 + '"/>' + shp + ' style="fill:' + (sn ? "var(--snowc)" : "var(--rain)") + '" clip-path="url(#' + id + ')"/>' + shp + ' style="fill:none;stroke:var(--ink-3)" stroke-width="1.5"/>';
+        if(showC) b += TX(x, cy + 14, Math.round(d.pop || 0) + "%", {s:13, w:600, c:(t1 - hh) < cy + 6 ? "#06223a" : "var(--ink)"});
+        if(showA) b += TX(x, cy + 54, amtText(d), {s:12, c:d.amt ? "var(--ink)" : "var(--ink-3)"}); });
+      return {h:cy + (showA ? 62 : 40), body:b}; }
+    if(style === "gauges"){ var top = showC ? 40 : 10, hgt = 120, bot = top + hgt;
+      [[0, "0"], [.5, "0.5"], [1, "1 in"]].forEach(function(v){ b += TX(g.x0 - 6, bot - v[0] * hgt + 4, v[1], {a:"end", s:10, c:"var(--ink-3)"}); });
+      days.forEach(function(d, i){ var x = +g.cx(i).toFixed(1), id = uid("gc"), fh = Math.min(1, d.amt || 0) * hgt;
+        b += '<clipPath id="' + id + '"><rect x="' + (x - 11) + '" y="' + top + '" width="22" height="' + hgt + '" rx="11"/></clipPath>' + RECT(x - 11, top, 22, hgt, 11, PANEL2) +
+          (fh ? '<rect x="' + (x - 11) + '" y="' + (bot - fh).toFixed(1) + '" width="22" height="' + fh.toFixed(1) + '" style="fill:' + (snowy(d) ? "var(--snowc)" : "var(--rain)") + '" clip-path="url(#' + id + ')"/>' : "") +
+          [.25, .5, .75].map(function(v){ var yy = (bot - v * hgt).toFixed(1); return '<line x1="' + (x + 5) + '" x2="' + (x + 11) + '" y1="' + yy + '" y2="' + yy + '" style="stroke:var(--ink-3)"/>'; }).join("") +
+          RECT(x - 11, top, 22, hgt, 11, "none", ' stroke-width="1.5" style="fill:none;stroke:var(--ink-3)"');
+        if(showC) b += chipS(x, 20, Math.min(50, g.cw - 10), Math.round(d.pop || 0) + "%", d.pop >= 50 ? "var(--chip)" : PANEL2, d.pop >= 50 ? "var(--chipInk)" : "var(--ink-3)", 13);
+        if(showA) b += TX(x, bot + 20, amtText(d), {s:12, c:d.amt ? "var(--ink)" : "var(--ink-3)"}); });
+      return {h:bot + (showA ? 28 : 8), body:b}; }
+    if(style === "falling"){
+      days.forEach(function(d, i){ var x = g.cx(i), sn = snowy(d), cnt = Math.round((d.pop || 0) / 10), w = g.cw - 12;
+        b += RECT(x - w / 2, 10, w, 30, 15, "var(--cloudband)", ' opacity="' + (0.25 + 0.6 * (d.pop || 0) / 100).toFixed(2) + '"');
+        if(showC) b += TX(x, 30, Math.round(d.pop || 0) + "%", {s:13, w:600});
+        for(var k = 0; k < cnt; k++){ var sx = x + ((k * 23) % Math.max(10, w - 10)) - (w - 10) / 2, dl = -((k * 0.53) % 1.4), len = 6 + (d.amt || 0) * 26;
+          b += '<g style="animation:' + (sn ? "wsnow 2.8s" : "wfall 1.2s") + ' linear ' + (dl * (sn ? 2 : 1)).toFixed(2) + 's infinite">' +
+            (sn ? '<circle cx="' + sx.toFixed(1) + '" cy="50" r="2.4" style="fill:var(--snowc)"/>' : '<line x1="' + sx.toFixed(1) + '" x2="' + (sx - 2).toFixed(1) + '" y1="46" y2="' + (46 + len).toFixed(1) + '" style="stroke:var(--rain)" stroke-width="2" stroke-linecap="round"/>') + '</g>'; }
+        var acc = d.amt ? Math.max(3, d.amt * 28) : 0;
+        b += '<line x1="' + (x - w / 2).toFixed(1) + '" x2="' + (x + w / 2).toFixed(1) + '" y1="146" y2="146" style="stroke:var(--line)"/>';
+        if(acc) b += RECT(x - w / 2 + 4, 146 - acc, w - 8, acc, 3, sn ? "var(--snowc)" : "var(--rain)");
+        if(showA) b += TX(x, 166, amtText(d), {s:12, c:d.amt ? "var(--ink)" : "var(--ink-3)"}); });
+      return {h:showA ? 174 : 154, body:b}; }
+    var top2 = 30, bot2 = 150, id2 = uid("ca"), pts = days.map(function(d, i){ return [g.cx(i), bot2 - (d.pop || 0) / 100 * (bot2 - top2)]; });
+    b += '<defs><linearGradient id="' + id2 + '" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#4da3ff" stop-opacity=".75"/><stop offset="1" stop-color="#4da3ff" stop-opacity=".05"/></linearGradient></defs>' +
+      grid(function(p){ return bot2 - p / 100 * (bot2 - top2); }, [0, 50, 100], function(p){ return p + "%"; }) +
+      '<path d="' + smooth(pts, top2, bot2) + ' L' + g.cx(days.length - 1).toFixed(1) + ' ' + bot2 + ' L' + g.cx(0).toFixed(1) + ' ' + bot2 + ' Z" fill="url(#' + id2 + ')"/><path d="' + smooth(pts, top2, bot2) + '" style="fill:none;stroke:var(--rain)" stroke-width="2.5"/>';
+    days.forEach(function(d, i){ var x = pts[i][0], yy = pts[i][1], r = d.amt ? 5 + Math.sqrt(d.amt) * 15 : 0;
+      if(showA && r) b += '<circle cx="' + x.toFixed(1) + '" cy="' + yy.toFixed(1) + '" r="' + r.toFixed(1) + '" style="fill:' + (snowy(d) ? "var(--snowc)" : "#2b7fd8") + ';stroke:var(--bg)" stroke-width="2"/>';
+      if(showC) b += TX(x, yy - (showA ? r : 0) - 9, Math.round(d.pop || 0) + "%", {s:13, w:600});
+      if(showA) b += TX(x, bot2 + 20, amtText(d), {s:12, c:d.amt ? "var(--ink)" : "var(--ink-3)"}); });
+    return {h:bot2 + (showA ? 28 : 6), body:b};
+  }
+  KINDS.wxchart = { every:15 * MIN, draw:function(el, m){
+    var x = wxNeed(el); if(!x) return;
+    var n = Math.max(3, Math.min(14, +opt(m, "days", 10) || 10)), days = x.days.slice(0, n), g = geo(days.length);
+    var parts = [chartTop(m, g, days), chartTemp(m, g, days), chartWet(m, g, days)], y = 0, b = "";
+    parts.forEach(function(p){ if(!p.h) return; b += '<g transform="translate(0,' + y + ')">' + p.body + '</g>'; y += p.h + 8; });
+    if(!y){ quietBox(el, "Ten-day chart: tick something to show in its settings"); return; }
+    el.innerHTML = wxsvg(720, y, b, n + "-day chart with highs, lows, temperature and rain or snow");
+  }};
+
+  /* -------------------------------------------- Ten days ---- */
+  KINDS.wxten = { every:15 * MIN, draw:function(el, m){
+    var x = wxNeed(el); if(!x) return;
+    var days = x.days.slice(0, 10), b = RECT(0, 0, 720, 176, 0, PANEL), today = opt(m, "today", true), lows = opt(m, "lows", true);
+    days.forEach(function(d, i){ var r = Math.floor(i / 5), cx = 80 + (i % 5) * 140, y = 22 + r * 172;
+      b += chipS(cx, y + 22, 112, i === 0 && today ? "Today" : DAYS[parseDay(d.date).getDay()], "var(--chip)", "var(--chipInk)", 15) + sky(d.code, cx, y + 74, 58, {pop:d.pop, amt:d.amt, hi:d.hi}) +
+        TX(cx, y + 130, T0(d.hi) + "°", {s:28, w:600}) + (lows ? TX(cx, y + 154, T0(d.lo) + "°", {s:17, c:"var(--ink-3)"}) : ""); });
+    el.innerHTML = wxsvg(720, 352, b, "Ten days in two rows of five with highs" + (lows ? " and lows" : ""));
+  }};
+
+  /* -------------------------------------------- Five-day curve ---- */
+  KINDS.wxcurve = { every:15 * MIN, draw:function(el, m){
+    var x = wxNeed(el); if(!x) return;
+    var start = midnight().getTime(), hrs = x.hours.filter(function(h){ return h.at >= start && h.at < start + 5 * 24 * HOUR; });
+    if(hrs.length < 24){ quietBox(el, "Weather loading"); return; }
+    var W = 720, x0 = 40, x1 = W - 10, y0 = 40, y1 = 250, temps = hrs.map(function(h){ return h.temp; });
+    var lo = Math.floor((Math.min.apply(null, temps) - 3) / 5) * 5, hi = Math.ceil((Math.max.apply(null, temps) + 3) / 5) * 5, b = "";
+    function X(t){ return x0 + (x1 - x0) * (t - start) / (5 * 24 * HOUR); }
+    function Y(t){ return y1 - (t - lo) / ((hi - lo) || 1) * (y1 - y0); }
+    if(opt(m, "scale", true)){ var steps = 8;
+      for(var i = 0; i < steps; i++){ var ta = lo + i * (hi - lo) / steps, tb = ta + (hi - lo) / steps;
+        b += RECT(x0, Y(tb), x1 - x0, Y(ta) - Y(tb), 0, tcol((ta + tb) / 2), ' opacity=".5"'); } }
+    if(opt(m, "nights", true)) hrs.forEach(function(h){ if(!h.day) b += RECT(X(h.at), y0, X(h.at + HOUR) - X(h.at), y1 - y0, 0, "var(--night)", ' opacity=".45"'); });
+    for(var d = 0; d < 5; d++){ var ds = start + d * 24 * HOUR, dd = new Date(ds);
+      b += TX(X(ds + 12 * HOUR), 18, d === 0 ? "Today" : DAYS[dd.getDay()], {s:13, w:600, c:dd.getDay() % 6 === 0 ? "var(--over)" : "var(--ink)"}) + TX(X(ds + 12 * HOUR), 32, shortDate(dd), {s:10, c:"var(--ink-3)"});
+      [6, 12, 18].forEach(function(h){ b += TX(X(ds + h * HOUR), y1 + 16, clock24() ? h : (h === 12 ? "noon" : (h % 12) + (h < 12 ? "a" : "p")), {s:10, c:"var(--ink-3)"}); }); }
+    for(var t = lo; t <= hi; t += 10) b += TX(x0 - 6, Y(t) + 4, T0(t), {a:"end", s:10, c:"var(--ink-3)"});
+    b += '<polyline points="' + hrs.map(function(h){ return X(h.at).toFixed(1) + "," + Y(h.temp).toFixed(1); }).join(" ") + '" style="fill:none;stroke:var(--over)" stroke-width="3"/>';
+    for(d = 0; d < 5; d++){ var day = hrs.filter(function(h){ return h.at >= start + d * 24 * HOUR && h.at < start + (d + 1) * 24 * HOUR; }); if(!day.length) continue;
+      var mx = day.reduce(function(a, h){ return h.temp > a.temp ? h : a; }), mn = day.reduce(function(a, h){ return h.temp < a.temp ? h : a; });
+      b += TX(X(mx.at), Y(mx.temp) - (opt(m, "icons", true) ? 34 : 10), T0(mx.temp), {s:13, w:600}) + TX(X(mn.at), Y(mn.temp) + 20, T0(mn.temp), {s:13, w:600});
+      if(opt(m, "icons", true)){ var noon = day.filter(function(h){ return new Date(h.at).getHours() === 13; })[0] || mx; b += sky(noon.code, X(mx.at), Y(mx.temp) - 16, 30, {pop:noon.pop}); } }
+    el.innerHTML = wxsvg(W, 270, b, "Five days of hourly temperature as one line");
+  }};
+
+  /* -------------------------------------------- maps ---- */
+  /* A small map made of map tiles (Esri's gray canvas maps, free to show with
+     credit), centered on home. Dark tiles in the dark look, light ones in the
+     light look. */
+  function lon2x(lon, z){ return (lon + 180) / 360 * 256 * Math.pow(2, z); }
+  function lat2y(lat, z){ var s = Math.sin(lat * Math.PI / 180); return (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * 256 * Math.pow(2, z); }
+  function mapBase(el, z){
+    var h = home(), W = el.clientWidth, H = el.clientHeight; if(!h || !W || !H) return null;
+    var cx = lon2x(h[1], z), cy = lat2y(h[0], z), left = cx - W / 2, top = cy - H / 2, look = THEME.light ? "World_Light_Gray_Base" : "World_Dark_Gray_Base", tiles = "";
+    for(var tx = Math.floor(left / 256); tx * 256 < left + W; tx++) for(var ty = Math.floor(top / 256); ty * 256 < top + H; ty++)
+      tiles += '<img alt="" src="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/' + look + '/MapServer/tile/' + z + '/' + ty + '/' + tx + '" style="left:' + (tx * 256 - left).toFixed(0) + 'px;top:' + (ty * 256 - top).toFixed(0) + 'px">';
+    return {z:z, left:left, top:top, W:W, H:H, tiles:tiles, homeX:W / 2, homeY:H / 2,
+            px:function(lat, lon){ return [lon2x(lon, z) - left, lat2y(lat, z) - top]; }};
+  }
+  var CREDIT = '<span class="credit">Map tiles © Esri</span>';
+
+  /* -------------------------------------------- Wind streaks ---- */
+  function loadWindGrid(){
+    var h = home(); if(!h || !needs("wind")) return;
+    var lats = [], lons = [];
+    for(var i = -2; i <= 2; i++) for(var j = -2; j <= 2; j++){ lats.push((h[0] + i * 0.9).toFixed(2)); lons.push((h[1] + j * 1.3).toFixed(2)); }
+    getJSON("https://api.open-meteo.com/v1/forecast?latitude=" + lats.join(",") + "&longitude=" + lons.join(",") + "&current=wind_speed_10m,wind_direction_10m,wind_gusts_10m&wind_speed_unit=mph").then(function(list){
+      if(!Array.isArray(list)) list = [list];
+      DATA.windGrid = list.map(function(p){ return {lat:p.latitude, lon:p.longitude, sp:p.current.wind_speed_10m, dir:p.current.wind_direction_10m, gust:p.current.wind_gusts_10m}; });
+      drawKind("wind");
+    }).catch(function(){});
+  }
+  KINDS.wind = {
+    mount:function(el, m, rec){ rec.sig = ""; },
+    draw:function(el, m, rec){
+      el.classList.toggle("round", opt(m, "round", true));
+      var g = DATA.windGrid, base = mapBase(el, +opt(m, "zoom", 7) || 7);
+      if(!g || !base){ quietBox(el, "Wind loading"); return; }
+      var sig = [base.W, base.H, base.z, THEME.light, opt(m, "legend", true), g.length, g[0].sp].join("|");
+      if(sig === rec.sig && el.querySelector("canvas")) return;
+      rec.sig = sig; cancelAnimationFrame(rec.raf);
+      var mid = g[Math.floor(g.length / 2)];
+      el.innerHTML = '<div class="mapwrap"><div class="tiles">' + base.tiles + '</div><canvas></canvas><span class="homept" style="left:' + base.homeX + 'px;top:' + base.homeY + 'px"></span>' +
+        (opt(m, "legend", true) ? '<span class="legend">' + (mid.dir != null ? COMPASS[Math.round(mid.dir / 45) % 8] : "") + " " + windU(mid.sp) + " " + windUnit() + (mid.gust ? ", gusts " + windU(mid.gust) : "") + '</span>' : "") + CREDIT + '</div>';
+      var cv = el.querySelector("canvas"), W = cv.width = base.W, H = cv.height = base.H, ctx = cv.getContext("2d");
+      var pts = g.map(function(p){ var xy = base.px(p.lat, p.lon), r = (p.dir + 180) * Math.PI / 180; return {x:xy[0], y:xy[1], u:Math.sin(r) * p.sp, v:-Math.cos(r) * p.sp}; });
+      function field(x, y){ var su = 0, sv = 0, sw = 0;   /* inverse-distance blend of the nearby grid points */
+        pts.forEach(function(p){ var d2 = (p.x - x) * (p.x - x) + (p.y - y) * (p.y - y) + 400, w = 1 / d2; su += p.u * w; sv += p.v * w; sw += w; });
+        return [su / sw, sv / sw]; }
+      var P = []; for(var i = 0; i < Math.round(W * H / 700); i++) P.push({x:Math.random() * W, y:Math.random() * H, a:Math.random() * 80 | 0});
+      var light = THEME.light, ink = light ? "rgba(20,32,43," : "rgba(235,245,255,", fast = light ? "rgba(0,110,160," : "rgba(140,230,255,";
+      function step(){
+        if(!el.isConnected) return;
+        ctx.globalCompositeOperation = "destination-in"; ctx.fillStyle = "rgba(0,0,0,.9)"; ctx.fillRect(0, 0, W, H);
+        ctx.globalCompositeOperation = "source-over"; ctx.lineWidth = Math.max(1.2, W / 600);
+        P.forEach(function(p){ var v = field(p.x, p.y), k = W / 1400, nx = p.x + v[0] * k, ny = p.y + v[1] * k, sp = Math.sqrt(v[0] * v[0] + v[1] * v[1]);
+          ctx.strokeStyle = (sp > 15 ? fast : ink) + ".85)";
+          ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(nx, ny); ctx.stroke(); p.x = nx; p.y = ny; p.a++;
+          if(p.x < 0 || p.y < 0 || p.x > W || p.y > H || p.a > 90){ p.x = Math.random() * W; p.y = Math.random() * H; p.a = 0; } });
+        rec.raf = requestAnimationFrame(step);
+      }
+      step();
+    },
+    unmount:function(el, m, rec){ cancelAnimationFrame(rec.raf); }
+  };
+
+  /* -------------------------------------------- Wind compass ---- */
+  KINDS.windcompass = { every:5 * MIN, draw:function(el, m){
+    var x = wxNeed(el); if(!x) return;
+    var now = x.now, deg = now.deg || 0, b = '<circle cx="190" cy="180" r="130" style="fill:' + PANEL + '"/><circle cx="190" cy="180" r="112" style="fill:none;stroke:var(--line)" stroke-width="2"/>';
+    for(var i = 0; i < 72; i++){ var a = i * 5 * Math.PI / 180, r1 = i % 18 ? 106 : 98;
+      b += '<line x1="' + (190 + Math.sin(a) * r1).toFixed(1) + '" y1="' + (180 - Math.cos(a) * r1).toFixed(1) + '" x2="' + (190 + Math.sin(a) * 112).toFixed(1) + '" y2="' + (180 - Math.cos(a) * 112).toFixed(1) +
+        '" style="stroke:' + (i % 18 ? "var(--ink-3)" : "var(--ink)") + '" stroke-width="' + (i % 18 ? 1 : 2) + '"/>'; }
+    b += TX(190, 64, "N", {s:16, w:600}) + TX(306, 186, "E", {s:16, w:600, c:"var(--ink-3)"}) + TX(190, 308, "S", {s:16, w:600, c:"var(--ink-3)"}) + TX(74, 186, "W", {s:16, w:600, c:"var(--ink-3)"});
+    /* The arrow points the way the wind blows, so it starts from the side the wind comes from. */
+    var to = (deg + 180) % 360;
+    b += '<g class="compass-needle" style="transform-origin:190px 180px;--a0:' + (to - 7) + 'deg;--a1:' + (to + 7) + 'deg"><path d="M190 76 L204 112 L190 104 L176 112z" style="fill:var(--chip)"/>' +
+      '<line x1="190" y1="104" x2="190" y2="284" style="stroke:var(--chip)" stroke-width="3" stroke-dasharray="2 6" stroke-linecap="round"/></g>';
+    b += TX(190, 178, windU(now.wind), {s:52, w:600}) + TX(190, 204, windUnit(), {s:15, c:"var(--ink-3)"});
+    var names = {N:"north", NE:"northeast", E:"east", SE:"southeast", S:"south", SW:"southwest", W:"west", NW:"northwest"};
+    b += TX(400, 120, "Wind from the " + (names[now.dir] || now.dir), {a:"start", s:22, w:600});
+    var y = 156;
+    if(opt(m, "gusts", true) && now.gust != null){ b += TX(400, y, "Gusts to " + windU(now.gust) + " " + windUnit(), {a:"start", s:18}); y += 30; }
+    if(opt(m, "chill", true)){ b += TX(400, y, (now.feels < now.temp ? "Wind chill " : "Feels like ") + T0(now.feels) + "°", {a:"start", s:18, c:"var(--ink-3)"}); y += 30; }
+    if(opt(m, "outlook", true)){
+      var next = x.hours.filter(function(h){ return h.at > Date.now() && h.at < Date.now() + 12 * HOUR; }), say = "";
+      if(next.length){ var top = next.reduce(function(a, h){ return h.wind > a.wind ? h : a; }), low = next.reduce(function(a, h){ return h.wind < a.wind ? h : a; });
+        say = top.wind > now.wind + 5 ? "Picking up to " + windU(top.wind) + " " + windUnit() + " by " + hourName(new Date(top.at))
+            : low.wind < now.wind - 5 ? "Easing to " + windU(low.wind) + " " + windUnit() + " by " + hourName(new Date(low.at)) : "Steady through the next 12 hours"; }
+      b += TX(400, y + 20, say, {a:"start", s:14, c:"var(--ink-3)"}); }
+    el.innerHTML = wxsvg(720, 360, b, "Wind from the " + (names[now.dir] || now.dir) + " at " + windU(now.wind) + " " + windUnit());
+  }};
+
+  /* -------------------------------------------- Radar and satellite ---- */
+  var RVMAPS = null, rvAsked = 0;
+  function rainviewer(){
+    if(RVMAPS && Date.now() - rvAsked < 10 * MIN) return Promise.resolve(RVMAPS);
+    rvAsked = Date.now();
+    return getJSON("https://api.rainviewer.com/public/weather-maps.json", true).then(function(j){ RVMAPS = j; return j; });
+  }
+  var SECTORS = {umv:"Upper Mississippi Valley", cgl:"Great Lakes", nr:"Northern Rockies", sp:"Southern Plains", smv:"Southern Mississippi Valley", ne:"Northeast",
+                 se:"Southeast", sr:"Southern Rockies", pnw:"Pacific Northwest", psw:"Pacific Southwest"};
+  KINDS.radarloop = { every:MIN,
+    mount:function(el, m, rec){ rec.sig = ""; rec.sat = []; rec.satAt = 0; },
+    draw:function(el, m, rec){
+      el.classList.toggle("round", opt(m, "round", true));
+      var src = opt(m, "source", "rainviewer"), z = +opt(m, "zoom", 7) || 7;
+      if(src === "nws"){
+        nwsPoint().then(function(pt){ var st = pt.props.radarStation, url = "https://radar.weather.gov/ridge/standard/" + st + "_loop.gif";
+          var sig = "nws|" + url + "|" + Math.floor(Date.now() / (10 * MIN));
+          if(sig === rec.sig) return; rec.sig = sig;
+          el.innerHTML = '<div class="mapwrap"><img class="pic" alt="" src="' + esc(fresh(url)) + '"><span class="cap">' + esc(st) + ' radar</span></div>'; })
+          .catch(function(){ quietBox(el, "Weather Service radar unavailable"); });
+        return;
+      }
+      if(src === "satellite"){
+        var sector = SECTORS[opt(m, "sector", "umv")] ? opt(m, "sector", "umv") : "umv";
+        var url2 = "https://cdn.star.nesdis.noaa.gov/GOES19/ABI/SECTOR/" + sector + "/GEOCOLOR/600x600.jpg";
+        /* NOAA's ready-made loops are several megabytes; the board fetches the
+           latest picture every ten minutes and plays the ones it has kept. */
+        if(Date.now() - rec.satAt > 10 * MIN || rec.satSector !== sector){
+          if(rec.satSector !== sector){ rec.sat = []; rec.satSector = sector; }
+          rec.satAt = Date.now(); var pre = new Image();
+          pre.onload = function(){ rec.sat.push(pre.src); if(rec.sat.length > 8) rec.sat.shift(); rec.sig = ""; drawOne(rec); };
+          pre.src = fresh(url2);
+        }
+        var sig2 = "sat|" + rec.sat.join("|") + "|" + opt(m, "timeline", true);
+        if(sig2 === rec.sig) return; rec.sig = sig2; clearInterval(rec.anim);
+        if(!rec.sat.length){ quietBox(el, "Satellite loading"); return; }
+        el.innerHTML = '<div class="mapwrap">' + rec.sat.map(function(s, i){ return '<img class="pic sat" alt="" src="' + esc(s) + '"' + (i === rec.sat.length - 1 ? '' : ' style="visibility:hidden"') + '>'; }).join("") +
+          '<span class="cap">Satellite · ' + esc(SECTORS[sector]) + '</span></div>';
+        var imgs = el.querySelectorAll(".sat"), k = 0;
+        if(imgs.length > 1) rec.anim = setInterval(function(){ k = (k + 1) % (imgs.length + 3); var on = Math.min(k, imgs.length - 1);
+          Array.prototype.forEach.call(imgs, function(im, i){ im.style.visibility = i === on ? "visible" : "hidden"; }); }, 600);
+        return;
+      }
+      var base = mapBase(el, z); if(!base){ quietBox(el, "Radar: waiting for the location"); return; }
+      rainviewer().then(function(j){
+        var frames = (j.radar.past || []).concat(j.radar.nowcast || []).slice(-10), sig3 = ["rv", base.W, base.H, z, THEME.light, opt(m, "timeline", true), frames.map(function(f){ return f.path; }).join()].join("|");
+        if(sig3 === rec.sig) return; rec.sig = sig3; clearInterval(rec.anim);
+        var tx0 = Math.floor(base.left / 256), ty0 = Math.floor(base.top / 256), tx1 = Math.floor((base.left + base.W) / 256), ty1 = Math.floor((base.top + base.H) / 256);
+        var layer = function(f){ var s = ""; for(var tx = tx0; tx <= tx1; tx++) for(var ty = ty0; ty <= ty1; ty++)
+          s += '<img alt="" src="' + j.host + f.path + '/256/' + z + '/' + tx + '/' + ty + '/2/1_1.png" style="left:' + (tx * 256 - base.left).toFixed(0) + 'px;top:' + (ty * 256 - base.top).toFixed(0) + 'px">';
+          return s; };
+        var now = Date.now() / 1000;
+        el.innerHTML = '<div class="mapwrap"><div class="tiles">' + base.tiles + '</div><div class="frames">' + frames.map(function(f){ return '<div class="fr">' + layer(f) + '</div>'; }).join("") + '</div>' +
+          '<span class="homept" style="left:' + base.homeX + 'px;top:' + base.homeY + 'px"></span>' +
+          (opt(m, "timeline", true) ? '<div class="timeline">' + frames.map(function(){ return "<i></i>"; }).join("") + '<b></b></div>' : "") + '<span class="credit" style="bottom:2.3em">RainViewer · map tiles © Esri</span></div>';
+        var frs = el.querySelectorAll(".fr"), ticks = el.querySelectorAll(".timeline i"), lab = el.querySelector(".timeline b"), k = -1;
+        function show(){ k = (k + 1) % (frs.length + 4); var on = Math.min(k, frs.length - 1);
+          Array.prototype.forEach.call(frs, function(f, i){ f.classList.toggle("on", i === on); });
+          Array.prototype.forEach.call(ticks, function(t, i){ t.classList.toggle("on", i === on); });
+          if(lab){ var mins = Math.round((frames[on].time - now) / 60); lab.textContent = Math.abs(mins) < 6 ? "Now" : (mins < 0 ? mins + " min" : "+" + mins + " min"); } }
+        show(); rec.anim = setInterval(show, 500);
+      }).catch(function(){ if(!el.querySelector(".fr")) quietBox(el, "Radar unavailable"); });
+    },
+    unmount:function(el, m, rec){ clearInterval(rec.anim); }
+  };
+
+  /* -------------------------------------------- Map with layers (Windy) ---- */
+  KINDS.windymap = {
+    mount:function(el, m, rec){ rec.k = 0; rec.sig = ""; },
+    draw:function(el, m, rec){
+      el.classList.toggle("round", opt(m, "round", true));
+      var h = home(); if(!h){ quietBox(el, "Map: waiting for the location"); return; }
+      var list = [["radar", "lRadar"], ["wind", "lWind"], ["temp", "lTemp"], ["snowAccu", "lSnow"], ["rain", "lRain"], ["clouds", "lClouds"]].filter(function(l){ return opt(m, l[1], l[0] !== "rain" && l[0] !== "clouds"); });
+      if(!list.length){ quietBox(el, "Map: tick a layer in its settings"); return; }
+      var secs = Math.max(10, +opt(m, "seconds", 30) || 30), z = +opt(m, "zoom", 7) || 7;
+      var sig = [list.join(), secs, z, h.join()].join("|");
+      if(sig !== rec.sig){ rec.sig = sig; clearInterval(rec.timer); rec.k = 0;
+        var go = function(){ var l = list[rec.k % list.length][0]; rec.k++;
+          el.innerHTML = '<iframe title="Weather map" loading="lazy" src="https://embed.windy.com/embed.html?type=map&location=coordinates&metricRain=in&metricTemp=' + (setting("units", "temp") === "C" ? "°C" : "°F") +
+            '&metricWind=' + (setting("units", "wind") === "kmh" ? "km/h" : "mph") + '&zoom=' + z + '&overlay=' + l + '&product=ecmwf&level=surface&lat=' + (+h[0]).toFixed(2) + '&lon=' + (+h[1]).toFixed(2) +
+            '&detailLat=' + (+h[0]).toFixed(2) + '&detailLon=' + (+h[1]).toFixed(2) + '&marker=true"></iframe>'; };
+        go(); if(list.length > 1) rec.timer = setInterval(go, secs * 1000);
+      }
+    },
+    unmount:function(el, m, rec){ clearInterval(rec.timer); }
+  };
+
+  /* -------------------------------------------- Air quality and pollen ---- */
+  var AQI = [[50, "#3fbf5f", "Good"], [100, "#e6cf3a", "Moderate"], [150, "#f08a2a", "Unhealthy for some"], [200, "#e04848", "Unhealthy"], [300, "#8e4fbf", "Very unhealthy"], [500, "#7e0023", "Hazardous"]];
+  function aqiBand(v){ for(var i = 0; i < AQI.length; i++) if(v <= AQI[i][0]) return AQI[i]; return AQI[AQI.length - 1]; }
+  KINDS.air = { every:30 * MIN, draw:function(el, m){
+    var a = DATA.air; if(!a){ quietBox(el, DATA.airWhy || "Air quality loading"); return; } el.classList.add("wxbox");
+    var b = "", cx = 180, cy = 210, r = 120, band = aqiBand(a.aqi || 0), gauge = opt(m, "gauge", true), left = gauge ? 370 : 40;
+    function pt(v, rr){ var t = Math.PI * (1 - Math.min(300, v) / 300); return [cx + Math.cos(t) * rr, cy - Math.sin(t) * rr]; }
+    if(gauge){ [[0,50],[50,100],[100,150],[150,200],[200,300]].forEach(function(s, i){ var p1 = pt(s[0], r), p2 = pt(s[1], r);
+        b += '<path d="M' + p1[0].toFixed(1) + ' ' + p1[1].toFixed(1) + ' A ' + r + ' ' + r + ' 0 0 1 ' + p2[0].toFixed(1) + ' ' + p2[1].toFixed(1) + '" style="fill:none;stroke:' + AQI[i][1] + '" stroke-width="22"/>'; });
+      var nd = pt(a.aqi || 0, r - 34);
+      b += '<line x1="' + cx + '" y1="' + cy + '" x2="' + nd[0].toFixed(1) + '" y2="' + nd[1].toFixed(1) + '" style="stroke:var(--ink)" stroke-width="4" stroke-linecap="round"/><circle cx="' + cx + '" cy="' + cy + '" r="8" style="fill:var(--ink)"/>' +
+        TX(cx, 54, "Air quality", {s:15, c:"var(--ink-3)"}) + TX(cx, 262, Math.round(a.aqi), {s:48, w:600}) + TX(cx, 292, band[2], {s:18, c:band[1]}); }
+    else b += TX(left, 70, "Air quality " + Math.round(a.aqi) + " · " + band[2], {a:"start", s:24, w:600, c:band[1]});
+    if(opt(m, "pollutants", true)){
+      [["Fine particles (PM2.5)", Math.round(a.pm25) + " µg/m³"], ["Ozone", Math.round((a.o3 || 0) / 1.96) + " ppb"]].forEach(function(rw, i){ var y = (gauge ? 96 : 120) + i * 46;
+        b += TX(left, y, rw[0], {a:"start", s:16, c:"var(--ink-3)"}) + TX(690, y, rw[1], {a:"end", s:18, w:600}) + '<line x1="' + left + '" x2="690" y1="' + (y + 14) + '" y2="' + (y + 14) + '" style="stroke:var(--line)"/>'; }); }
+    if(opt(m, "outlook", true)) a.days.forEach(function(d, i){ var x = left + 22 + i * ((690 - left - 44) / 4), bd = aqiBand(d.aqi);
+      b += TX(x, 236, i === 0 ? "Today" : DAYS[parseDay(d.date).getDay()].slice(0, 3), {s:13, c:"var(--ink-3)"}) + '<circle cx="' + x.toFixed(1) + '" cy="262" r="17" style="fill:' + bd[1] + '"/>' + TX(x, 267, Math.round(d.aqi), {s:13, w:600, c:"#10202a"}); });
+    el.innerHTML = wxsvg(720, 320, b, "Air quality " + Math.round(a.aqi) + ", " + band[2]);
+  }};
+  var POLLEN_COL = ["var(--line-2)", "#3fbf5f", "#a7d43a", "#e6cf3a", "#f08a2a", "#e04848"];
+  KINDS.pollen = { every:HOUR, draw:function(el, m){
+    var p = DATA.pollen; if(!p){ quietBox(el, DATA.pollenWhy || "Pollen loading"); return; } el.classList.add("wxbox");
+    var n = Math.max(1, Math.min(5, +opt(m, "days", 5) || 5)), days = p.slice(0, n), rows = [["TREE", "Tree"], ["GRASS", "Grass"], ["WEED", "Weed"]], b = "";
+    var any = days.some(function(d){ return rows.some(function(r){ return d.types[r[0]] && d.types[r[0]].season; }); });
+    if(!any){ el.innerHTML = wxsvg(720, 140, TX(360, 64, "Pollen: off season", {s:30, w:600}) + TX(360, 100, "No tree, grass or weed pollen in season", {s:16, c:"var(--ink-3)"}), "Pollen off season"); return; }
+    var w = 520 / n;
+    days.forEach(function(d, i){ b += TX(184 + w * (i + .5), 34, i === 0 ? "Today" : DAYS[parseDay(d.date).getDay()].slice(0, 3), {s:15, w:600}); });
+    rows.forEach(function(r, j){ var y = 56 + j * 66; b += TX(24, y + 28, r[1], {a:"start", s:20, w:600});
+      days.forEach(function(d, i){ var t = d.types[r[0]] || {v:0, cat:"None"}, v = Math.max(0, Math.min(5, t.v || 0));
+        b += RECT(184 + i * w + 4, y, w - 8, 44, 6, POLLEN_COL[v]) + TX(184 + w * (i + .5), y + 27, t.season ? t.cat : "None", {s:Math.min(14, w * .14), w:600, c:v ? "#10202a" : "var(--ink-3)"}); }); });
+    el.innerHTML = wxsvg(720, 260, b, "Pollen levels for tree, grass and weed");
+  }};
+
+  /* -------------------------------------------- Weather rotation ---- */
+  /* One box that takes turns showing other weather modules. Each module in
+     the rotation keeps its own settings; it is drawn here instead of in its
+     own box. The transitions play whatever the TV asks about motion. */
+  var ROTATED = {};                              /* module id -> true, for modules drawn inside a rotation */
+  var PREVIEW_FAST = false;
+  function findModule(id){ var hit = null; CONFIG.screens.forEach(function(sc){ (sc.modules || []).forEach(function(m){ if(m.id === id) hit = m; }); }); return hit; }
+  function transit(a, b, kind, ms){
+    b.classList.add("on"); b.style.zIndex = 2; if(a) a.style.zIndex = 1;
+    var outs = [];
+    function fin(){ if(a) a.classList.remove("on"); outs.forEach(function(x){ try{ x.cancel(); }catch(e){} }); b.style.zIndex = ""; if(a) a.style.zIndex = ""; b.style.opacity = ""; }
+    if(!a || kind === "cut" || !b.animate){ fin(); return; }
+    var E = {duration:ms, easing:"cubic-bezier(.6,0,.2,1)"}, F = {duration:ms, easing:"cubic-bezier(.6,0,.2,1)", fill:"forwards"};
+    function out(k){ outs.push(a.animate(k, F)); }
+    function inn(k){ b.animate(k, E).onfinish = fin; }
+    if(kind === "wipe") inn([{clipPath:"inset(0 100% 0 0)"}, {clipPath:"inset(0 0 0 0)"}]);
+    else if(kind === "slide"){ out([{transform:"translateX(0)"}, {transform:"translateX(-100%)"}]); inn([{transform:"translateX(100%)"}, {transform:"translateX(0)"}]); }
+    else if(kind === "push"){ out([{transform:"translateY(0)"}, {transform:"translateY(-100%)"}]); inn([{transform:"translateY(100%)"}, {transform:"translateY(0)"}]); }
+    else if(kind === "zoom"){ out([{opacity:1, transform:"scale(1)"}, {opacity:0, transform:"scale(1.1)"}]); inn([{opacity:0, transform:"scale(.86)"}, {opacity:1, transform:"scale(1)"}]); }
+    else if(kind === "blur"){ out([{filter:"blur(0px)", opacity:1}, {filter:"blur(12px)", opacity:0}]); inn([{filter:"blur(12px)", opacity:0}, {filter:"blur(0px)", opacity:1}]); }
+    else { out([{opacity:1}, {opacity:0}]); inn([{opacity:0}, {opacity:1}]); }
+  }
+  KINDS.wxrotate = {
+    mount:function(el, m, rec){ rec.k = -1; rec.layers = []; rec.sig = ""; },
+    draw:function(el, m, rec){
+      var line = (opt(m, "lineup", []) || []).filter(function(e){ var x = findModule(e.id); return x && KINDS[x.type] && x.type !== "wxrotate"; });
+      var sig = JSON.stringify(line) + "|" + opt(m, "seconds", 5);
+      if(sig !== rec.sig || !rec.layers.length){
+        rec.sig = sig; clearTimeout(rec.timer);
+        rec.layers.forEach(function(L){ clearInterval(L.rec.tick); var k = KINDS[L.rec.mod.type]; if(k && k.unmount) k.unmount(L.rec.el, L.rec.mod, L.rec); });
+        el.innerHTML = ""; rec.layers = [];
+        if(!line.length){ quietBox(el, PREVIEW ? "Weather rotation: drag modules into it in its settings" : ""); return; }
+        line.forEach(function(e){
+          var mod = findModule(e.id), wrap = document.createElement("div"), inner = document.createElement("div");
+          wrap.className = "lyr"; inner.className = "mod m-" + mod.type; inner.style.setProperty("--f", String(+mod.font || 1));
+          if(mod.fontFamily) inner.style.fontFamily = family(mod.fontFamily);
+          paint(inner, mod.color); wrap.appendChild(inner); el.appendChild(wrap);
+          var r = {mod:mod, el:inner, screen:rec.screen, inRotation:true}, k = KINDS[mod.type];
+          if(k.mount) k.mount(inner, mod, r);
+          if(k.every) r.tick = setInterval(function(){ if(r.screen === shown && wrap.classList.contains("on")) drawOne(r); }, k.every);
+          rec.layers.push({wrap:wrap, rec:r, t:e.t || "fade"});
+        });
+        rec.k = -1;
+      }
+      if(rec.k < 0) next();
+      function next(){
+        clearTimeout(rec.timer);
+        if(!el.isConnected || !rec.layers.length) return;
+        var prev = rec.k >= 0 ? rec.layers[rec.k] : null; rec.k = (rec.k + 1) % rec.layers.length;
+        var L = rec.layers[rec.k];
+        if(prev !== L){ drawOne(L.rec); transit(prev && prev.wrap, L.wrap, L.t, PREVIEW_FAST ? 450 : 900); }
+        rec.timer = setTimeout(next, Math.max(3, +opt(m, "seconds", 5) || 5) * 1000 / (PREVIEW_FAST ? 4 : 1));
+      }
+      rec.next = next;
+    },
+    unmount:function(el, m, rec){ clearTimeout(rec.timer); rec.layers.forEach(function(L){ clearInterval(L.rec.tick); var k = KINDS[L.rec.mod.type]; if(k && k.unmount) k.unmount(L.rec.el, L.rec.mod, L.rec); }); }
+  };
+  function markRotated(){
+    ROTATED = {};
+    CONFIG.screens.forEach(function(sc){ (sc.modules || []).forEach(function(m){
+      if(m.type === "wxrotate" && !m.hidden) (opt(m, "lineup", []) || []).forEach(function(e){ ROTATED[e.id] = true; }); }); });
+  }
+
+  /* ===================================================== the look ==== */
+  /* Light and dark. The palette is worked out here so a change can fade over
+     several minutes, as chosen on the Settings tab. Screens with a dark
+     background take the light background in the light look; a screen given a
+     light color of its own keeps it. */
+  var LOOKS = {
+    dark:{bg:"#000000", surface:"#0b0f12", ink:"#f2f4f5", "ink-2":"#b3bdc4", "ink-3":"#7b8891", line:"#2a3238", "line-2":"#3c4750", accent:"#48b0c0", warm:"#f5c400",
+          over:"#e2564a", panel:"#151b21", panel2:"#1f2731", band:"#3b78c4", chip:"#2bb3e6", chipInk:"#052a3b", chipSunInk:"#3b2500", rain:"#4da3ff", snowc:"#e6eeff",
+          night:"#000000", cloudband:"#c8d2e1"},
+    paper:{bg:"#f3efe6", surface:"#fbf8f2", ink:"#23262b", "ink-2":"#4a4e55", "ink-3":"#6b6f76", line:"#ddd6c8", "line-2":"#c9c0ae", accent:"#1f7f8f", warm:"#a46b00",
+           over:"#c0392b", panel:"#fbf8f2", panel2:"#ece5d6", band:"#3b78c4", chip:"#1f8fc7", chipInk:"#ffffff", chipSunInk:"#ffffff", rain:"#2878d6", snowc:"#7d93b0",
+           night:"#8a8478", cloudband:"#8a97a8"},
+    daylight:{bg:"#e9eff4", surface:"#ffffff", ink:"#14202b", "ink-2":"#3b4855", "ink-3":"#56626e", line:"#d3dbe3", "line-2":"#bcc7d1", accent:"#1f7f8f", warm:"#a46b00",
+           over:"#c0392b", panel:"#ffffff", panel2:"#eef3f7", band:"#3b78c4", chip:"#1f8fc7", chipInk:"#ffffff", chipSunInk:"#ffffff", rain:"#2878d6", snowc:"#7d93b0",
+           night:"#7e8a96", cloudband:"#90a0b2"}
+  };
+  var THEME = {f:-1, light:false};
+  function mixHex(a, b, f){ var A = hexRGB(a), B = hexRGB(b); return "rgb(" + A.map(function(v, i){ return Math.round(v + (B[i] - v) * f); }).join(",") + ")"; }
+  function lum(c){ var m = /^#([0-9a-f]{6})$/i.exec(c || ""); if(!m) return 0; var v = hexRGB(c); return (0.299 * v[0] + 0.587 * v[1] + 0.114 * v[2]) / 255; }
+  /* How light the board should be right now, from 0 (dark) to 1 (light). */
+  function lightNow(){
+    var mode = setting("theme", "mode"), fade = Math.max(0, +setting("theme", "fade") || 0), now = Date.now();
+    if(mode === "light") return 1;
+    if(mode !== "sun" && mode !== "times") return 0;
+    var a, b;
+    if(mode === "sun"){ var d = DATA.wxx && DATA.wxx.days.filter(function(x){ return x.date === isoDay(new Date()); })[0];
+      if(!d || !d.rise) return THEME.f < 0 ? 0 : THEME.f;          /* not known yet: stay as is */
+      a = d.rise; b = d.set; }
+    else { var mid = midnight().getTime(); a = mid + hmToMin(setting("theme", "from")) * MIN; b = mid + hmToMin(setting("theme", "to")) * MIN; if(b <= a) b += 24 * HOUR; }
+    if(!fade) return now >= a && now < b ? 1 : 0;
+    var F = fade * MIN;
+    if(now < a || now >= b + F) return 0;
+    if(now < a + F) return (now - a) / F;
+    if(now < b) return 1;
+    return 1 - (now - b) / F;
+  }
+  function applyLook(force){
+    var f = PREVIEW && PREVIEW_LOOK != null ? PREVIEW_LOOK : lightNow();
+    f = Math.round(f * 50) / 50;
+    if(!force && f === THEME.f) return;
+    var wasLight = THEME.light;
+    THEME.f = f; THEME.light = f >= 0.5;
+    var L = LOOKS[setting("theme", "look") === "daylight" ? "daylight" : "paper"], D = LOOKS.dark, root = document.documentElement;
+    Object.keys(D).forEach(function(k){ root.style.setProperty("--" + k, f <= 0 ? D[k] : f >= 1 ? L[k] : mixHex(D[k], L[k], f)); });
+    root.style.colorScheme = THEME.light ? "light" : "dark";
+    root.classList.toggle("lightlook", THEME.light);
+    document.body.style.background = f <= 0 ? D.bg : mixHex(D.bg, L.bg, f);
+    Array.prototype.forEach.call(stage.querySelectorAll(".screen"), function(s){
+      var own = s.dataset.bg || "";
+      if(own && lum(own) > 0.35) return;                   /* a light screen color of its own stays */
+      s.style.background = f <= 0 ? own : mixHex(/^#[0-9a-f]{6}$/i.test(own) ? own : "#000000", L.bg, f);
+    });
+    if(wasLight !== THEME.light) drawAll();               /* icons and map tiles change with the look */
+  }
+  var PREVIEW_LOOK = null;
+
+  /* ===================================================== night, shift ==== */
+  function nightCover(){
+    var c = $("nightcover") || document.body.appendChild(Object.assign(document.createElement("div"), {id:"nightcover", className:"nightcover"}));
+    var on = !PREVIEW && setting("night", "on") && within(minuteOfDay(), hmToMin(setting("night", "from")), hmToMin(setting("night", "to")));
+    var mode = setting("night", "mode");
+    stage.style.filter = on && mode === "dim" ? "brightness(.3)" : "";
+    c.classList.toggle("on", on && mode !== "dim");
+    c.textContent = on && mode === "clock" ? hm(new Date()).replace(/ (AM|PM)$/, "") : "";
+  }
+  function burnShift(){
+    var on = !PREVIEW && setting("burnIn") !== false, k = Math.floor(Date.now() / HOUR) % 8, d = [[0,0],[3,0],[3,3],[0,3],[-3,3],[-3,0],[-3,-3],[0,-3]][k];
+    stage.style.transform = on ? "translate(" + d[0] + "px," + d[1] + "px)" : "";
+  }
+
+  /* ===================================================== warnings ==== */
+  var alertSeen = {};
+  function showAlerts(list){
+    var bar = $("alertbar") || document.body.appendChild(Object.assign(document.createElement("div"), {id:"alertbar", className:"alertbar"}));
+    var big = $("alertbig") || document.body.appendChild(Object.assign(document.createElement("div"), {id:"alertbig", className:"alertbig"}));
+    var top = list[0];
+    bar.classList.toggle("on", !!top && setting("alerts", "banner"));
+    if(top){
+      bar.className = "alertbar" + (setting("alerts", "banner") ? " on" : "") + (/watch/i.test(top.event) ? " watch" : /advisory|statement/i.test(top.event) ? " advisory" : "");
+      var until = top.ends ? new Date(top.ends) : null;
+      bar.textContent = "⚠ " + top.event + (until ? " until " + hm(until) + " " + DAYS[until.getDay()] : "") + (list.length > 1 ? "  ·  and " + (list.length - 1) + " more" : "");
+    }
+    list.forEach(function(a){
+      if(alertSeen[a.id]) return; alertSeen[a.id] = true;
+      if(!setting("alerts", "breakIn") || PREVIEW) return;
+      big.innerHTML = "<b>" + esc(a.event) + "</b><span>" + esc(a.head) + "</span>"; big.classList.add("on");
+      setTimeout(function(){ big.classList.remove("on"); }, 30000);
+    });
+  }
+
+  /* ===================================================== retro loop ==== */
+  /* Every time the minutes end in 8 (3:08, 3:18 ...), the early-90s cable
+     weather look takes the screen for about a minute, then the board comes back. */
+  var RETRO = {shownAt:""};
+  function moonPhases(){
+    var syn = 29.530588853, ref = Date.UTC(2000, 0, 6, 18, 14) / 86400000, now = Date.now() / 86400000, out = [];
+    var k = Math.floor((now - ref) / syn), names = ["New", "First", "Full", "Last"];
+    for(var q = 0; q < 8 && out.length < 4; q++){ var t = ref + (k + Math.floor(q / 4)) * syn + (q % 4) * syn / 4; if(t * 86400000 > Date.now() - 86400000) out.push([names[q % 4], new Date(t * 86400000)]); }
+    return out;
+  }
+  function retroPages(){
+    var x = DATA.wxx, now = x ? x.now : null, days = x ? x.days : [], p = [];
+    var icon = function(code, night){ return '<div style="width:100%">' + dayIcon({code:code, pop:null, amt:0, hi:null, cloud:null, night:!!night, t:.5}, false).svg.replace('<svg ', '<svg style="width:100%;height:auto;filter:drop-shadow(.4cqw .4cqw 0 #000)" ') + '</div>'; };
+    if(now){
+      var vis = x.hours.filter(function(h){ return h.at <= Date.now(); }).slice(-1)[0];
+      p.push(["Current<br>Conditions", '<div style="display:grid;grid-template-columns:42% 58%;height:100%"><div style="text-align:center"><div style="font-size:8cqw;line-height:1.1">' + T0(now.temp) + '°</div><div>' + esc(words(now.code)) +
+        '</div><div style="width:46%;margin:1cqw auto">' + icon(now.code, now.night) + '</div><div>Wind: ' + now.dir + " " + windU(now.wind) + '</div></div><div><div class="y">' + esc((DATA.cal && DATA.cal.place) || "Home") + '</div>' +
+        [["Humidity:", Math.round(now.rh) + "%"], ["Dewpoint:", T0(now.dew) + "°"], ["Visibility:", vis && vis.vis != null ? Math.round(vis.vis / 1609) + " Mi" : "–"],
+         ["Pressure:", now.inhg ? now.inhg.toFixed(2) : "–"], [now.feels < now.temp ? "Wind Chill:" : "Feels Like:", T0(now.feels) + "°"]].map(function(r){ return '<div class="row"><span>' + r[0] + '</span><span>' + r[1] + '</span></div>'; }).join("") + '</div></div>']);
+    }
+    if(DATA.nwsObs && DATA.nwsObs.length) p.push(["Latest<br>Observations", '<table><tr style="font-size:3.2cqw"><td></td><td style="text-align:right">°' + (setting("units", "temp") === "C" ? "C" : "F") + '</td><td style="padding-left:2cqw">WEATHER</td><td colspan="2" style="text-align:right">WIND</td></tr>' +
+      DATA.nwsObs.slice(0, 8).map(function(o){ return '<tr><td>' + esc(o.name) + '</td><td style="text-align:right">' + T0(o.temp) + '</td><td style="padding-left:2cqw">' + esc(o.sky) + '</td><td style="padding-left:2cqw">' + o.dir + '</td><td style="text-align:right">' + (o.wind == null ? "" : windU(o.wind)) + '</td></tr>'; }).join("") + '</table>']);
+    if(DATA.nwsText && DATA.nwsText.length) p.push(["Local<br>Forecast", '<div style="text-transform:uppercase;line-height:1.4;font-size:3.6cqw">' + DATA.nwsText.slice(0, 2).map(function(t){ return esc(t.name) + "... " + esc(t.text); }).join("<br><br>") + '</div>']);
+    if(days.length > 3) p.push(["Extended<br>Forecast", '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:3cqw;text-align:center;height:100%">' + days.slice(1, 4).map(function(d){
+      return '<div><div class="y">' + DAYS[parseDay(d.date).getDay()].slice(0, 3).toUpperCase() + '</div><div style="width:62%;margin:1cqw auto">' + icon(d.code) + '</div><div style="font-size:3.6cqw;line-height:1.1;min-height:8cqw">' + esc(words(d.code)) +
+        '</div><div class="row" style="justify-content:center;gap:5cqw;margin-top:2cqw"><span><span class="y" style="font-size:3.2cqw">Lo</span><br>' + T0(d.lo) + '</span><span><span class="y" style="font-size:3.2cqw">Hi</span><br>' + T0(d.hi) + '</span></div></div>'; }).join("") + '</div>']);
+    if(days.length > 1 && days[0].rise){
+      var t0 = new Date(days[0].rise), s0 = new Date(days[0].set), t1 = new Date(days[1].rise), s1 = new Date(days[1].set);
+      p.push(["Almanac", '<div style="display:grid;grid-template-columns:34% 33% 33%;row-gap:1cqw"><span></span><span class="y">' + DAYS[t0.getDay()] + '</span><span class="y">' + DAYS[t1.getDay()] + '</span><span>Sunrise:</span><span>' + hm(t0).toLowerCase() +
+        '</span><span>' + hm(t1).toLowerCase() + '</span><span>Sunset:</span><span>' + hm(s0).toLowerCase() + '</span><span>' + hm(s1).toLowerCase() + '</span></div><div class="y" style="margin-top:4cqw">Moon Data:</div>' +
+        '<div style="display:grid;grid-template-columns:repeat(4,1fr);text-align:center;font-size:3.8cqw">' + moonPhases().map(function(mp){ var i = ["New","First","Full","Last"].indexOf(mp[0]);
+          return '<div>' + mp[0] + '<div style="width:9cqw;height:9cqw;margin:1cqw auto;border-radius:50%;background:' + (i === 0 ? "#111" : i === 2 ? "#e8e8e8" : "linear-gradient(90deg," + (i === 1 ? "#111 50%,#e8e8e8 50%" : "#e8e8e8 50%,#111 50%") + ")") + ';box-shadow:0 0 0 .3cqw #c9c9c9"></div>' + MON[mp[1].getMonth()] + " " + mp[1].getDate() + '</div>'; }).join("") + '</div>']);
+    }
+    return p;
+  }
+  function retroCheck(){
+    if(PREVIEW || !setting("retro", "on")) return;
+    var d = new Date(), key = d.getHours() + ":" + d.getMinutes();
+    if(d.getMinutes() % 10 !== 8 || RETRO.shownAt === key) return;
+    if(within(minuteOfDay(d), hmToMin(setting("retro", "quietFrom")), hmToMin(setting("retro", "quietTo")))) return;
+    if(setting("night", "on") && within(minuteOfDay(d), hmToMin(setting("night", "from")), hmToMin(setting("night", "to")))) return;
+    RETRO.shownAt = key; showRetro();
+  }
+  function showRetro(){
+    var pages = retroPages(); if(!pages.length) return;
+    family("Barlow Condensed");
+    var box = $("retro") || document.body.appendChild(Object.assign(document.createElement("div"), {id:"retro", className:"retro"}));
+    var crawl = "CONDITIONS AT " + esc(((DATA.cal && DATA.cal.place) || "HOME").toUpperCase()) + (DATA.wxx ? "... " + esc(words(DATA.wxx.now.code).toUpperCase()) + "... TEMPERATURE " + T0(DATA.wxx.now.temp) + "°" : "") +
+      (DATA.wxx && DATA.wxx.days[0] && DATA.wxx.days[0].set ? "... SUNSET " + hm(new Date(DATA.wxx.days[0].set)) : "") + "... STAY TUNED FOR YOUR LOCAL FORECAST";
+    box.innerHTML = '<div class="frame"><div class="rhead"></div><div class="logo">GLANCE</div><div class="rtitle"></div><div class="rclock"><span class="t"></span><br><span class="d"></span></div>' +
+      '<div class="rpanel">' + pages.map(function(p){ return '<div class="pg">' + p[1] + '</div>'; }).join("") + '</div><div class="rfoot"><div class="crawl">' + crawl + '</div></div></div>';
+    box.classList.add("on");
+    var pg = box.querySelectorAll(".pg"), title = box.querySelector(".rtitle"), i = 0, secs = Math.max(20, +setting("retro", "secs") || 60), each = secs * 1000 / pages.length;
+    function clock(){ var n = new Date(); box.querySelector(".t").textContent = hm(n).replace(/(\d+:\d+)/, function(s){ return s + ":" + ("0" + n.getSeconds()).slice(-2); });
+      box.querySelector(".d").textContent = (DAYS[n.getDay()].slice(0, 3) + " " + MON[n.getMonth()] + " " + n.getDate()).toUpperCase(); }
+    function show(){ Array.prototype.forEach.call(pg, function(p, k){ p.classList.toggle("on", k === i); }); title.innerHTML = pages[i][0]; }
+    clock(); show();
+    var ck = setInterval(clock, 1000), turn = setInterval(function(){ i++; if(i >= pages.length){ clearInterval(turn); clearInterval(ck); box.classList.remove("on"); return; } show(); }, each);
+  }
+
+  /* ===================================================== housekeeping ==== */
+  /* Out-of-date notice, nightly refresh, and the schedule for the feeds. */
+  var last = {wx:0, cal:0, extra:0, alerts:0, retro:0, slow:0, fit:0};
+  function staleCheck(){
+    if(!setting("stale", "on")){ note("stale", ""); return; }
+    var hrs = Math.max(1, +setting("stale", "hours") || 1), w = DATA.wxx || DATA.wx, age = w ? (Date.now() - w.at) / HOUR : 0;
+    note("stale", !navigator.onLine ? "no internet: the weather is from " + (w ? hm(new Date(w.at)) : "earlier") : w && age > hrs ? "weather last updated " + hm(new Date(w.at)) : "");
+  }
+  var restartedOn = "";
+  function restartCheck(){
+    if(PREVIEW || !setting("restart", "on")) return;
+    var d = new Date(), at = hmToMin(setting("restart", "at")), today = isoDay(d);
+    if(minuteOfDay(d) !== at || restartedOn === today) return;
+    restartedOn = today;
+    fetch(fresh(location.pathname), {cache:"no-store"}).then(function(r){ if(r.ok) location.reload(); }).catch(function(){});
+  }
+  function everyMinute(){
+    var now = Date.now(), wxEvery = Math.max(5, +setting("refresh", "weather") || 15) * MIN, calEvery = Math.max(2, +setting("refresh", "calendar") || 10) * MIN;
+    if(now - last.wx >= wxEvery){ last.wx = now; loadWeather(); loadWxExtra(); loadAir(); loadWindGrid(); }
+    if(now - last.cal >= calEvery){ last.cal = now; loadCalendar(); }
+    if(now - last.alerts >= 5 * MIN){ last.alerts = now; loadAlerts(); }
+    if(now - last.retro >= 30 * MIN){ last.retro = now; loadRetroData(); }
+    if(now - last.slow >= 6 * HOUR){ last.slow = now; loadNormals(); loadSpread(); loadPollen(); }
+    if(now - last.fit >= 30 * MIN){ last.fit = now; loadFitness(); }
+    applyLook(); nightCover(); burnShift(); staleCheck(); retroCheck(); restartCheck();
+  }
+  function extrasNow(){ loadWxExtra(); loadNormals(); loadSpread(); loadAir(); loadPollen(); loadWindGrid(); loadAlerts(); loadRetroData();
+    last.wx = last.alerts = last.retro = last.slow = Date.now(); }
+
+  /* Feeds a newly added module needs, fetched once; the regular schedule
+     keeps them fresh after that. (The Manager's preview calls this on every
+     edit, so it never asks again for what it already has.) */
+  function extrasIfMissing(){
+    if(!home()) return;
+    if(!DATA.wxx) loadWxExtra(); if(!DATA.air) loadAir(); if(!DATA.windGrid) loadWindGrid();
+    if(!DATA.normals) loadNormals(); if(!DATA.spread) loadSpread(); if(!DATA.pollen && !DATA.pollenTried){ DATA.pollenTried = true; loadPollen(); }
+    if(!DATA.nwsObs) loadRetroData();
+  }
+
+
+  /* ================================================ calendar views ==== */
+  /* The calendar layouts chosen in the Calendar Picks review. Events belong to
+     people: the Manager's Calendars tab says whose each calendar is (or that
+     it only feeds the countdowns). With no people set up, each calendar
+     stands for one person, in its own name and color. */
+  var EVERYONE = {id:"f", name:"Everyone", col:"#b197fc"};
+  function calTag(i){ var c = (DATA.cal && DATA.cal.calendars[i]) || {}; return c.id || (TAGS && TAGS[c.name]) || ""; }
+  function havePeople(){ return (CONFIG.people || []).some(function(p){ return p && p.id && p.name; }); }
+  function calOnlyCountdown(i){ return (CONFIG.calOwners || {})[calTag(i)] === "cd"; }
+  function calCountdown(i){ var t = calTag(i); return (CONFIG.calOwners || {})[t] === "cd" || !!(CONFIG.countdownCals || {})[t]; }
+  function famList(){
+    var by = {f:EVERYONE}, list;
+    if(havePeople()) list = CONFIG.people.filter(function(p){ return p && p.id && p.name; }).map(function(p){ return {id:p.id, name:p.name, col:/^#[0-9a-f]{6}$/i.test(p.color || "") ? p.color : "#4da3ff"}; });
+    else list = (DATA.cal ? DATA.cal.calendars : []).map(function(c, i){ return {id:"cal" + i, name:c.name || "Calendar", col:c.color || "#4da3ff"}; }).filter(function(p, i){ return !calOnlyCountdown(i); });
+    list.forEach(function(p){ by[p.id] = p; });
+    return {list:list, by:by, ids:list.map(function(p){ return p.id; })};
+  }
+  function ownerOf(ci){ if(!havePeople()) return "cal" + ci; var o = (CONFIG.calOwners || {})[calTag(ci)]; return o && o !== "cd" ? o : "f"; }
+  function hmm(s){ var p = String(s || "").split(":"); return (+p[0] || 0) * 60 + (+p[1] || 0); }
+  function dayISO(n){ return isoDay(new Date(midnight().getTime() + n * 24 * HOUR + 2 * HOUR)); }
+  function dayDate(n){ return parseDay(dayISO(n)); }
+  function nowMin(){ var d = new Date(); return d.getHours() * 60 + d.getMinutes(); }
+  /* One day's events as {p, s, e, t, all}, countdown-only calendars left out. */
+  function evts(n){
+    var d = dayISO(n), fam = famList(), out = [];
+    if(!DATA.cal) return out;
+    DATA.cal.events.forEach(function(e){
+      if(e.d !== d || calOnlyCountdown(e.c)) return;
+      var p = ownerOf(e.c); if(!fam.by[p]) p = "f";
+      var s = e.t ? hmm(e.t) : null, en = e.t ? (e.e ? hmm(e.e) : s + 60) : null;
+      out.push({p:p, s:s, e:en <= s ? s + 30 : en, t:e.s, all:!e.t});
+    });
+    return out.sort(function(a, b){ return (a.all ? -1 : a.s) - (b.all ? -1 : b.s); });
+  }
+  function past(n, e){ return n < 0 || (n === 0 && !e.all && e.e <= nowMin()); }
+  function rightNow(n, e){ var m = nowMin(); return n === 0 && !e.all && e.s <= m && e.e > m; }
+  function keep(n, e, m){ return !(opt(m, "done", "dim") === "hide" && past(n, e)); }
+  function dimIt(n, e, m){ return opt(m, "done", "dim") !== "hide" && past(n, e); }
+
+  /* Drawing: the same sizes as the review sketches, on a 960 by 540 picture
+     that scales to the box. Colors come from the page's palette. */
+  var CK = {ink:"var(--ink)", mut:"var(--ink-3)", panel:"var(--panel)", panel2:"var(--panel2)", grid:"var(--line)", grid2:"var(--line-2)",
+            accent:"var(--chip)", accentInk:"var(--chipInk)", now:"var(--over)", dark:"#0d141b"};
+  function r1(v){ return Math.round(v * 10) / 10; }
+  function cT(x, y, txt, o){ o = o || {};
+    return '<text x="' + r1(x) + '" y="' + r1(y) + '" font-size="' + (o.s || 14) + '" font-weight="' + (o.w || 400) + '" style="fill:' + (o.c || CK.ink) + '"' +
+      (o.a ? ' text-anchor="' + o.a + '"' : '') + (o.ls ? ' letter-spacing="' + o.ls + '"' : '') + (o.op != null ? ' opacity="' + o.op + '"' : '') + '>' + esc(o.up ? String(txt).toUpperCase() : txt) + '</text>'; }
+  function cR(x, y, w, h, fill, o){ o = o || {};
+    return '<rect x="' + r1(x) + '" y="' + r1(y) + '" width="' + r1(Math.max(0, w)) + '" height="' + r1(Math.max(0, h)) + '" rx="' + (o.rx || 0) + '" style="fill:' + fill +
+      (o.st ? ';stroke:' + o.st : '') + '"' + (o.op != null ? ' fill-opacity="' + o.op + '"' : '') + (o.st ? ' stroke-width="' + (o.sw || 1) + '"' : '') + '/>'; }
+  function cL(x1, y1, x2, y2, c, w, op){ return '<line x1="' + r1(x1) + '" y1="' + r1(y1) + '" x2="' + r1(x2) + '" y2="' + r1(y2) + '" style="stroke:' + c + '" stroke-width="' + (w || 1) + '"' + (op != null ? ' stroke-opacity="' + op + '"' : '') + '/>'; }
+  function cC(x, y, r, fill, o){ o = o || {}; return '<circle cx="' + r1(x) + '" cy="' + r1(y) + '" r="' + r1(r) + '" style="fill:' + fill + (o.st ? ';stroke:' + o.st : '') + '"' + (o.st ? ' stroke-width="' + (o.sw || 1) + '"' : '') + '/>'; }
+  function cG(op, inner){ return op < 1 ? '<g opacity="' + op + '">' + inner + '</g>' : inner; }
+  function fitT(txt, maxW, size, bold){ txt = String(txt); var n = Math.floor(maxW / (size * (bold ? .53 : .49))); if(n < 2) return ""; return txt.length <= n ? txt : txt.slice(0, n - 1).replace(/\s+$/, "") + "…"; }
+  function wrapT(txt, maxW, size, lines){ var n = Math.floor(maxW / (size * .5)), out = [], cur = "";
+    String(txt).split(" ").forEach(function(w){ if(!cur) cur = w; else if((cur + " " + w).length <= n) cur += " " + w; else { out.push(cur); cur = w; } });
+    if(cur) out.push(cur); if(out.length > lines){ out = out.slice(0, lines); out[lines - 1] = fitT(out[lines - 1] + " …", maxW, size); } return out; }
+  function calSvg(body, label){ return '<svg class="wxs" viewBox="0 0 960 540" preserveAspectRatio="xMidYMid meet" role="img" aria-label="' + esc(label) + '">' + body + '</svg>'; }
+  function tmm(m, short){ var h = Math.floor(m / 60) % 24, mm = m % 60;
+    if(clock24()) return h + ":" + ("0" + mm).slice(-2);
+    return (h % 12 || 12) + (mm ? ":" + ("0" + mm).slice(-2) : "") + (short ? "" : (h < 12 ? " AM" : " PM")); }
+  function rngT(e){ if(e.all) return "All day"; var same = (e.s < 720) === (e.e < 720); return (same ? tmm(e.s, true) : tmm(e.s)) + "–" + tmm(e.e); }
+  function hlab(h){ return clock24() ? h + ":00" : (h % 12 || 12) + (h < 12 ? " AM" : " PM"); }
+  /* A face: initials on the person's color; Everyone is a little house. */
+  function face(x, y, r, p, fam){ var P = fam.by[p] || EVERYONE, b = cC(x, y, r, P.col);
+    if(p === "f") return b + '<path d="M' + r1(x - .5 * r) + ' ' + r1(y + .05 * r) + ' L' + r1(x) + ' ' + r1(y - .45 * r) + ' L' + r1(x + .5 * r) + ' ' + r1(y + .05 * r) + ' Z" style="fill:' + CK.dark + '"/>' + cR(x - .32 * r, y, .64 * r, .42 * r, CK.dark);
+    return b + cT(x, y + r * .37, (P.name || "?").charAt(0).toUpperCase(), {s:r1(r * 1.05), w:700, c:CK.dark, a:"middle"}); }
+  function block(x, y, w, h, e, fam, o){ o = o || {};
+    var P = fam.by[e.p] || EVERYONE, b = "", ink = o.outline ? CK.ink : CK.dark, pad = 6, s = o.s || 12.5;
+    b += o.outline ? cR(x, y, w, h, P.col, {rx:4, op:.2, st:P.col, sw:1.4}) : cR(x, y, w, h, P.col, {rx:4});
+    if(h >= 32){ b += cT(x + pad, y + s + 3, fitT(e.t, w - 2 * pad, s, true), {s:s, w:600, c:ink}); b += cT(x + pad, y + 2 * s + 5, fitT(rngT(e), w - 2 * pad, s - 1.5), {s:s - 1.5, c:ink, op:.78}); }
+    else if(h >= 13) b += cT(x + pad, y + h / 2 + s * .34, fitT((o.inlineTime ? tmm(e.s, true) + "  " : "") + e.t, w - 2 * pad, s - 1, true), {s:s - 1, w:600, c:ink});
+    return cG(o.past ? .4 : 1, b); }
+  function pill(x, y, w, e, fam, s){ s = s || 12; var P = fam.by[e.p] || EVERYONE; return cR(x, y, w, s + 10, P.col, {rx:4}) + cT(x + 6, y + s + 2, fitT(e.t, w - 12, s, true), {s:s, w:600, c:CK.dark}); }
+  function chipNow(x, y, col){ return cR(x, y, 38, 16, col || CK.now, {rx:3}) + cT(x + 19, y + 12, "NOW", {s:10.5, w:700, c:CK.dark, a:"middle", ls:.6}); }
+  function lanes(list){
+    var items = list.slice().sort(function(a, b){ return a.s - b.s || b.e - a.e; }), res = [], cl = [], ends = [], cEnd = -1;
+    function flush(){ cl.forEach(function(x){ x.n = ends.length; }); cl = []; ends = []; }
+    items.forEach(function(e){ if(cl.length && e.s >= cEnd) flush();
+      var k = -1; for(var i = 0; i < ends.length; i++) if(ends[i] <= e.s){ k = i; break; }
+      if(k < 0){ k = ends.length; ends.push(e.e); } else ends[k] = e.e;
+      var o = {ev:e, k:k}; cl.push(o); res.push(o); cEnd = Math.max(cEnd, e.e); });
+    flush(); return res; }
+  function clk(y0, y1, h0, h1){ return function(m){ m = Math.max(h0, Math.min(h1, m)); return y0 + (m - h0) / (h1 - h0) * (y1 - y0); }; }
+  function needCal(el){ if(!DATA.cal){ el.classList.remove("wxbox"); el.innerHTML = '<div class="quiet">' + esc(DATA.calWhy || "Calendar loading") + '</div>'; return false; } el.classList.add("wxbox"); return true; }
+  var DOW3 = function(n){ return DAYS[dayDate(n).getDay()].slice(0, 3).toUpperCase(); };
+
+  /* -------------------------------------------- A column for each person ---- */
+  KINDS.calperson = { every:MIN, draw:function(el, m){
+    if(!needCal(el)) return;
+    var fam = famList(), own = opt(m, "family", "each") === "own" && havePeople(), cols = own ? fam.ids.concat(["f"]) : fam.ids;
+    if(!cols.length){ quietBox(el, "No calendars yet"); return; }
+    var st = +opt(m, "start", 7), en = +opt(m, "end", 21), h0 = st * 60, h1 = en * 60, NOW = nowMin();
+    var x0 = 66, x1 = 950, cw = (x1 - x0) / cols.length, Y = clk(112, 532, h0, h1), list = evts(0), b = "", r = cols.length > 4 ? 23 : 28;
+    cols.forEach(function(p, i){ var x = x0 + cw * i, mine = list.filter(function(e){ return e.p === p; }), timed = mine.filter(function(e){ return !e.all; }), P = fam.by[p] || EVERYONE;
+      if(i % 2) b += cR(x, 0, cw, 540, "var(--ink)", {op:.03});
+      b += face(x + r + 12, 38, r, p, fam) + cT(x + 2 * r + 20, 36, fitT(P.name, cw - 2 * r - 26, 20, true), {s:20, w:600});
+      b += cT(x + 2 * r + 20, 56, fitT(timed.length + " today · " + timed.filter(function(e){ return e.e > NOW; }).length + " to go", cw - 2 * r - 26, 12.5), {s:12.5, c:CK.mut});
+      mine.filter(function(e){ return e.all; }).slice(0, 1).forEach(function(e){ b += pill(x + 6, 78, cw - 12, e, fam, 12); }); });
+    b += cT(x0 - 8, 94, "All day", {s:11, c:CK.mut, a:"end"});
+    for(var h = st; h <= en; h += (en - st > 14 ? 2 : 1)){ var y = Y(h * 60); b += cL(x0, y, x1, y, CK.grid); if(Math.abs(y - Y(NOW)) > 13 || NOW < h0 || NOW > h1) b += cT(x0 - 8, y + 4, hlab(h), {s:11, c:CK.mut, a:"end"}); }
+    cols.forEach(function(p, i){ var x = x0 + cw * i;
+      var col = list.filter(function(e){ return !e.all && (e.p === p || (!own && e.p === "f")) && keep(0, e, m) && e.e > h0 && e.s < h1; });
+      lanes(col).forEach(function(q){ var w = (cw - 10) / q.n; b += block(x + 5 + w * q.k + (q.k ? 2 : 0), Y(q.ev.s) + 1, w - (q.k ? 2 : 0), Math.max(16, Y(q.ev.e) - Y(q.ev.s) - 2), q.ev, fam,
+        {past:dimIt(0, q.ev, m), outline:q.ev.p === "f" && !own, inlineTime:true}); }); });
+    if(NOW >= h0 && NOW <= h1){ var yN = Y(NOW); b += cL(x0, yN, x1, yN, CK.now, 2.2) + cR(4, yN - 10, 54, 20, CK.now, {rx:4}) + cT(31, yN + 5, tmm(NOW, true), {s:12.5, w:700, c:CK.dark, a:"middle"}); }
+    el.innerHTML = calSvg(b, "Today with a column for each person");
+  }};
+
+  /* -------------------------------------------- A card for each person ---- */
+  KINDS.calcards = { every:MIN, draw:function(el, m){
+    if(!needCal(el)) return;
+    var fam = famList(), ids = fam.ids.slice(0, 6), band = opt(m, "band", true) && havePeople(), tomorrow = opt(m, "tomorrow", true);
+    if(!ids.length){ quietBox(el, "No calendars yet"); return; }
+    var b = "", cw = 940 / ids.length, list = evts(0), tom = evts(1), bottom = band ? 466 : 530, tomY = bottom - (tomorrow ? 82 : 0);
+    ids.forEach(function(p, i){ var x = 10 + i * cw + 4, w = cw - 8, cx = x + w / 2, P = fam.by[p], y = 146;
+      b += cR(x, 10, w, bottom - 10, CK.panel, {rx:10}) + cR(x + 12, 10, w - 24, 4, P.col, {rx:2}) + face(cx, 64, 38, p, fam) + cT(cx, 126, fitT(P.name, w - 16, 21, true), {s:21, w:600, a:"middle"});
+      list.filter(function(e){ return (e.p === p || (!band && e.p === "f")) && keep(0, e, m); }).forEach(function(e){ if(y > tomY - 30) return; var now = rightNow(0, e), g = "";
+        if(now) g += cR(x + 8, y - 6, w - 16, 48, P.col, {rx:6, op:.18});
+        g += cT(x + 16, y + 10, rngT(e), {s:12.5, c:CK.mut});
+        if(now) g += chipNow(x + w - 54, y - 1, P.col);
+        if(e.p === "f") g += cR(x + 10, y + 16, 3, 20, EVERYONE.col, {rx:1.5});
+        g += cT(x + 16, y + 32, fitT(e.t, w - 32, 17, true), {s:17, w:600});
+        b += cG(dimIt(0, e, m) ? .4 : 1, g); y += 52; });
+      if(tomorrow){ b += cL(x + 12, tomY, x + w - 12, tomY, CK.grid2) + cT(x + 16, tomY + 20, "TOMORROW", {s:11, w:600, c:CK.mut, ls:1.2});
+        tom.filter(function(e){ return e.p === p; }).slice(0, 2).forEach(function(e, k){ b += cT(x + 16, tomY + 42 + k * 21, fitT((e.all ? "All day" : tmm(e.s)) + "  " + e.t, w - 32, 13.5), {s:13.5, op:.85}); }); } });
+    if(band){ var fam2 = list.filter(function(e){ return e.p === "f"; }).map(function(e){ return (e.all ? "All day" : tmm(e.s)) + "  " + e.t; }).join("   ·   ");
+      b += cR(14, 476, 932, 54, EVERYONE.col, {rx:10, op:.2}) + face(44, 503, 18, "f", fam) + cT(72, 497, "EVERYONE TODAY", {s:11, w:600, c:EVERYONE.col, ls:1.2}) + cT(72, 519, fitT(fam2 || "Nothing for everyone today", 860, 16, true), {s:16, w:600}); }
+    el.innerHTML = calSvg(b, "A card for each person with today's events");
+  }};
+
+  /* -------------------------------------------- Each person's turn ---- */
+  function turnFrame(p, idx, people, fam, m){
+    var P = fam.by[p] || EVERYONE, mine = evts(0).filter(function(e){ return e.p === p; }), tom = evts(1).filter(function(e){ return e.p === p; }), b = "", NOW = nowMin();
+    var timed = mine.filter(function(e){ return !e.all; }), left = timed.filter(function(e){ return e.e > NOW; }).length, tomorrow = opt(m, "tomorrow", true);
+    b += cR(0, 0, 380, 540, P.col, {op:.12}) + face(190, 196, 118, p, fam) + cT(190, 376, fitT(P.name, 360, 46, true), {s:46, w:600, a:"middle"});
+    b += cT(190, 410, timed.length + (timed.length === 1 ? " thing" : " things") + " today · " + left + " to go", {s:18, c:CK.mut, a:"middle"});
+    people.forEach(function(q, k){ var x = 190 + (k - (people.length - 1) / 2) * 22; b += cC(x, 488, k === idx ? 6 : 4.5, k === idx ? (fam.by[q] || EVERYONE).col : CK.grid2); });
+    b += cT(420, 62, "TODAY", {s:14, w:600, c:P.col, ls:1.6});
+    var y = 96, stop = tomorrow ? 400 : 520;
+    mine.forEach(function(e){ if(y > stop - 60) return; var now = rightNow(0, e), g = "";
+      if(now) g += cR(408, y - 10, 532, 66, P.col, {rx:8, op:.18});
+      g += cT(424, y + 14, rngT(e), {s:17, c:CK.mut}); if(now) g += chipNow(890, y + 1, P.col);
+      g += cT(424, y + 46, fitT(e.t, 500, 30, true), {s:30, w:600});
+      b += cG(past(0, e) ? .4 : 1, g); y += 78; });
+    if(!mine.length) b += cT(424, 120, "Nothing today", {s:26, c:CK.mut});
+    if(tomorrow){ b += cL(420, 412, 940, 412, CK.grid2) + cT(420, 442, "TOMORROW", {s:13, w:600, c:CK.mut, ls:1.4});
+      if(!tom.length) b += cT(420, 474, "Nothing yet", {s:19, c:CK.mut});
+      tom.slice(0, 2).forEach(function(e, k){ b += cT(420, 474 + k * 30, (e.all ? "All day" : tmm(e.s)), {s:19, c:CK.mut}) + cT(540, 474 + k * 30, fitT(e.t, 400, 20, true), {s:20, w:600}); }); }
+    return calSvg(b, P.name + "'s day"); }
+  KINDS.calturns = { every:1000,
+    mount:function(el, m, rec){ rec.k = 0; rec.at = Date.now(); },
+    draw:function(el, m, rec){
+      if(!needCal(el)) return;
+      var fam = famList(), people = fam.ids.concat(opt(m, "everyone", true) && havePeople() ? ["f"] : []);
+      if(!people.length){ quietBox(el, "No calendars yet"); return; }
+      var secs = Math.max(3, +opt(m, "seconds", 5) || 5) * 1000;
+      if(Date.now() - rec.at >= secs){ rec.k = (rec.k + 1) % people.length; rec.at = Date.now(); rec.sig = ""; }
+      rec.k = rec.k % people.length;
+      var sig = rec.k + "|" + Math.floor(Date.now() / MIN) + "|" + (DATA.cal.generated || "") + "|" + JSON.stringify(m.opts || {});
+      if(sig === rec.sig) return; rec.sig = sig;
+      el.innerHTML = turnFrame(people[rec.k], rec.k, people, fam, m);
+    }
+  };
+
+  /* -------------------------------------------- The week grid ---- */
+  KINDS.calweek = { every:MIN, draw:function(el, m){
+    if(!needCal(el)) return;
+    var fam = famList(), start = opt(m, "start", "sun"), dow = new Date().getDay(), wkStart = setting("dates", "weekStart") === "mon" ? "mon" : start;
+    var first = start === "today" ? 0 : (wkStart === "mon" ? -((dow + 6) % 7) : -dow);
+    var hs = +opt(m, "h0", 7), he = +opt(m, "h1", 21), h0 = hs * 60, h1 = he * 60, NOW = nowMin();
+    var x0 = 60, x1 = 950, cw = (x1 - x0) / 7, Y = clk(100, 528, h0, h1), b = "";
+    for(var d = 0; d < 7; d++){ var n = first + d, x = x0 + cw * d, isT = n === 0, dw = dayDate(n).getDay();
+      if(dw === 0 || dw === 6) b += cR(x, 0, cw, 540, "var(--ink)", {op:.03});
+      b += cT(x + cw / 2, 24, DOW3(n), {s:12.5, w:600, c:isT ? CK.accent : CK.mut, a:"middle", ls:1});
+      if(isT) b += cC(x + cw / 2, 45, 15, CK.accent);
+      b += cT(x + cw / 2, 52, dayDate(n).getDate(), {s:20, w:600, c:isT ? CK.accentInk : (n < 0 ? CK.mut : CK.ink), a:"middle"}); }
+    b += cT(x0 - 8, 82, "All day", {s:10.5, c:CK.mut, a:"end"});
+    for(var h = hs; h <= he; h += (he - hs > 14 ? 2 : 1)){ var y = Y(h * 60); b += cL(x0, y, x1, y, CK.grid) + cT(x0 - 8, y + 4, hlab(h), {s:11, c:CK.mut, a:"end"}); }
+    for(var d2 = 0; d2 <= 7; d2++) b += cL(x0 + cw * d2, 62, x0 + cw * d2, 528, CK.grid);
+    for(var d3 = 0; d3 < 7; d3++){ var n3 = first + d3, xx = x0 + cw * d3, list = evts(n3).filter(function(e){ return keep(n3, e, m); });
+      list.filter(function(e){ return e.all; }).slice(0, 1).forEach(function(e){ b += cG(dimIt(n3, e, m) ? .4 : 1, pill(xx + 3, 66, cw - 6, e, fam, 11.5)); });
+      lanes(list.filter(function(e){ return !e.all && e.e > h0 && e.s < h1; })).forEach(function(q){ var w = (cw - 6) / q.n;
+        b += block(xx + 3 + w * q.k + (q.k ? 1 : 0), Y(q.ev.s) + 1, w - (q.k ? 1 : 0), Math.max(14, Y(q.ev.e) - Y(q.ev.s) - 2), q.ev, fam, {past:dimIt(n3, q.ev, m), s:12}); }); }
+    if(NOW >= h0 && NOW <= h1 && first <= 0 && first + 7 > 0){ var yN = Y(NOW), xT = x0 + cw * (0 - first);
+      b += cL(x0, yN, x1, yN, CK.now, 1, .35) + cL(xT, yN, xT + cw, yN, CK.now, 2.5) + cC(xT, yN, 5, CK.now); }
+    el.innerHTML = calSvg(b, "The week on the clock");
+  }};
+
+  /* -------------------------------------------- A few days, as cards ---- */
+  KINDS.caldays = { every:MIN, draw:function(el, m){
+    if(!needCal(el)) return;
+    var fam = famList(), k = Math.max(3, Math.min(7, +opt(m, "days", 5) || 5)), cw = 940 / k, b = "", faces = opt(m, "faces", true);
+    for(var i = 0; i < k; i++){ var n = i, x = 10 + i * cw + 3, w = cw - 6, isT = n === 0, y = 58, more = 0, big = w > 150, dt = dayDate(n);
+      b += cR(x, 10, w, 520, isT ? CK.panel2 : CK.panel, {rx:10});
+      b += cT(x + 12, 38, isT ? "Today" : (big ? DAYS[dt.getDay()] : DOW3(n)), {s:big ? 15 : 13, w:600, c:isT ? CK.accent : CK.mut, ls:1, up:true});
+      b += cT(x + w - 12, 38, big ? shortDate(dt) : dt.getDate(), {s:big ? 14 : 13, c:CK.mut, a:"end"});
+      evts(n).filter(function(e){ return keep(n, e, m); }).forEach(function(e){
+        if(y > 470){ more++; return; } var P = fam.by[e.p] || EVERYONE, g = "";
+        if(e.all){ b += cG(dimIt(n, e, m) ? .4 : 1, pill(x + 8, y, w - 16, e, fam, 13)); y += 32; return; }
+        var fw = faces ? 30 : 0;
+        g += cR(x + 8, y, w - 16, 52, P.col, {rx:6, op:.16, st:rightNow(n, e) ? P.col : null, sw:1.5}) + cR(x + 8, y, 4, 52, P.col, {rx:2});
+        if(faces) g += face(x + w - 28, y + 26, 13, e.p, fam);
+        g += cT(x + 20, y + 20, fitT(rngT(e), w - 32 - fw, 12), {s:12, c:CK.mut}) + cT(x + 20, y + 41, fitT(e.t, w - 34 - fw, 15, true), {s:15, w:600});
+        b += cG(dimIt(n, e, m) ? .4 : 1, g); y += 58; });
+      if(more) b += cT(x + 14, y + 16, "+ " + more + " more", {s:13, c:CK.mut}); }
+    el.innerHTML = calSvg(b, "Today and the next " + (k - 1) + " days as cards");
+  }};
+
+  /* -------------------------------------------- Month beside the day ---- */
+  KINDS.calmonth = { every:MIN, draw:function(el, m){
+    if(!needCal(el)) return;
+    var fam = famList(), mon = (opt(m, "week", "sun") === "mon") || setting("dates", "weekStart") === "mon", today = new Date(), first1 = new Date(today.getFullYear(), today.getMonth(), 1);
+    var lead = mon ? (first1.getDay() + 6) % 7 : first1.getDay(), startN = -(today.getDate() - 1) - lead, daysIn = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+    var rows = Math.ceil((lead + daysIn) / 7), gx = 30, cw = 58, top = 112, rh = 410 / rows, b = "";
+    b += cR(12, 12, 440, 516, CK.panel, {rx:12}) + cT(32, 56, ["January","February","March","April","May","June","July","August","September","October","November","December"][today.getMonth()], {s:30, w:600}) +
+      cT(250, 56, today.getFullYear(), {s:30, w:300, c:CK.mut});
+    (mon ? ["M","T","W","T","F","S","S"] : ["S","M","T","W","T","F","S"]).forEach(function(d, c){ b += cT(gx + cw * c + cw / 2, 96, d, {s:13, w:600, c:CK.mut, a:"middle"}); });
+    for(var r = 0; r < rows; r++) for(var c2 = 0; c2 < 7; c2++){ var n = startN + r * 7 + c2, cx = gx + cw * c2 + cw / 2, y = top + rh * r, dt = dayDate(n), isT = n === 0, out = dt.getMonth() !== today.getMonth(), g = "";
+      if(isT) g += cC(cx, y + rh * .27, Math.min(18, rh * .22), CK.accent);
+      g += cT(cx, y + rh * .27 + 7, dt.getDate(), {s:r1(Math.min(19, rh * .24)), w:isT ? 700 : 500, c:isT ? CK.accentInk : CK.ink, a:"middle"});
+      var who = []; evts(n).forEach(function(e){ if(who.indexOf(e.p) < 0) who.push(e.p); });
+      who = fam.ids.concat(["f"]).filter(function(p){ return who.indexOf(p) >= 0; }).slice(0, 5);
+      who.forEach(function(p, k){ g += cC(cx + (k - (who.length - 1) / 2) * 10, y + rh * .66, 3.6, (fam.by[p] || EVERYONE).col); });
+      b += cG(out ? .3 : n < 0 ? .45 : 1, g); }
+    var right = opt(m, "right", "tt"), days = right === "today" ? [0] : right === "three" ? [0, 1, 2] : [0, 1];
+    var y2 = 30, rowH = right === "three" ? 26 : right === "today" ? 40 : 30, sz = right === "today" ? 20 : 16.5;
+    days.forEach(function(n){
+      b += cT(476, y2 + 20, (n === 0 ? "TODAY · " : n === 1 ? "TOMORROW · " : "") + DAYS[dayDate(n).getDay()].toUpperCase() + " " + dayDate(n).getDate(), {s:13, w:600, c:n === 0 ? CK.accent : CK.mut, ls:1.3}); y2 += 36;
+      evts(n).forEach(function(e){ if(y2 > 520) return; var g = "", now = rightNow(n, e);
+        if(now) g += cR(470, y2 - 2, 476, rowH - 2, (fam.by[e.p] || EVERYONE).col, {rx:5, op:.18});
+        g += face(486, y2 + rowH / 2 - 3, 11, e.p, fam) + cT(504, y2 + rowH / 2 + 2, e.all ? "All day" : tmm(e.s), {s:13.5, c:CK.mut}) + cT(574, y2 + rowH / 2 + 3, fitT(e.t, 360, sz, true), {s:sz, w:600});
+        b += cG(past(n, e) ? .4 : 1, g); y2 += rowH; });
+      y2 += 14; });
+    el.innerHTML = calSvg(b, "The month with a dot for each busy person, beside the coming days");
+  }};
+
+  /* -------------------------------------------- Today and tomorrow ---- */
+  KINDS.caltoday = { every:MIN, draw:function(el, m){
+    if(!needCal(el)) return;
+    var fam = famList(), faces = opt(m, "faces", true), b = "";
+    [[0, "Today", 12], [1, "Tomorrow", 486]].forEach(function(q){ var n = q[0], x = q[2], w = 462, dt = dayDate(n), y = 100, tx = faces ? 64 : 38;
+      b += cR(x, 12, w, 516, CK.panel, {rx:12}) + cT(x + 22, 44, q[1], {s:13, w:600, c:n === 0 ? CK.accent : CK.mut, ls:1.4, up:true});
+      b += cT(x + 22, 76, DAYS[dt.getDay()] + ", " + shortDate(dt), {s:26, w:600});
+      evts(n).filter(function(e){ return keep(n, e, m); }).forEach(function(e){ if(y > 500) return; var P = fam.by[e.p] || EVERYONE, g = "";
+        if(e.all){ var pw = Math.min(w - 44, e.t.length * 7.4 + 28); b += cR(x + 22, y, pw, 26, P.col, {rx:13}) + cT(x + 36, y + 18, fitT(e.t, pw - 24, 13.5, true), {s:13.5, w:600, c:CK.dark}); y += 38; return; }
+        var now = rightNow(n, e);
+        if(now) g += cR(x + 12, y - 1, w - 24, 34, P.col, {rx:6, op:.18});
+        g += faces ? face(x + 38, y + 16, 15, e.p, fam) : cR(x + 22, y + 4, 4, 24, P.col, {rx:2});
+        g += cT(x + tx, y + 22, tmm(e.s), {s:15, c:CK.mut}) + cT(x + tx + 76, y + 23, fitT(e.t, w - tx - 96 - (now ? 48 : 0), 19, true), {s:19, w:600});
+        if(now) g += chipNow(x + w - 58, y + 9, P.col);
+        b += cG(dimIt(n, e, m) ? .4 : 1, g); y += 34; });
+      if(n === 1 && opt(m, "peek", true)){ y += 22; b += cL(x + 22, y, x + w - 22, y, CK.grid2) + cT(x + 22, y + 26, DAYS[dayDate(2).getDay()].toUpperCase(), {s:12, w:600, c:CK.mut, ls:1.2}); y += 50;
+        evts(2).forEach(function(e){ if(y > 512) return; b += cC(x + 28, y - 5, 4.5, (fam.by[e.p] || EVERYONE).col) + cT(x + 42, y, fitT((e.all ? "All day" : tmm(e.s)) + "   " + e.t, w - 64, 15), {s:15, c:CK.mut}); y += 24; }); } });
+    el.innerHTML = calSvg(b, "Today and tomorrow");
+  }};
+
+  /* -------------------------------------------- What's next ---- */
+  KINDS.calnext = { every:MIN, draw:function(el, m){
+    if(!needCal(el)) return;
+    var fam = famList(), NOW = nowMin(), list = evts(0).filter(function(e){ return !e.all; }), nowL = list.filter(function(e){ return rightNow(0, e); }),
+        up = list.filter(function(e){ return e.s > NOW; }), done = list.filter(function(e){ return e.e <= NOW; }), b = "", y0 = 228;
+    b += cR(12, 12, 566, 516, CK.panel, {rx:12}) + cT(36, 50, "NEXT UP", {s:13, w:600, c:CK.accent, ls:1.4});
+    if(up.length){ var nx = up[0], P = fam.by[nx.p] || EVERYONE, mins = nx.s - NOW;
+      b += face(100, 132, 60, nx.p, fam) + cT(184, 120, fitT(nx.t, 380, 48, true), {s:48, w:600}) + cT(184, 154, fitT(P.name + " · " + rngT(nx), 380, 20), {s:20, c:CK.mut});
+      b += cT(184, 192, mins < 60 ? "in " + mins + " minutes" : "in " + Math.floor(mins / 60) + " hr " + (mins % 60) + " min", {s:26, w:600, c:P.col}); }
+    else b += cT(36, 130, "Nothing more today", {s:40, w:600}) + cT(36, 170, "Tomorrow's first things are on the right", {s:18, c:CK.mut});
+    if(opt(m, "now", true)){ b += cL(36, y0, 554, y0, CK.grid2) + cT(36, y0 + 32, "HAPPENING NOW", {s:13, w:600, c:CK.mut, ls:1.4});
+      if(!nowL.length) b += cT(36, y0 + 64, "Nothing right now", {s:17, c:CK.mut});
+      nowL.slice(0, 2).forEach(function(e, i){ var y = y0 + 54 + i * 66, Q = fam.by[e.p] || EVERYONE, frac = (NOW - e.s) / (e.e - e.s);
+        b += face(62, y + 22, 23, e.p, fam) + cT(98, y + 18, fitT(e.t, 230, 21, true), {s:21, w:600}) + cT(98, y + 41, Q.name + " · until " + tmm(e.e), {s:14.5, c:CK.mut});
+        b += cR(340, y + 12, 210, 8, CK.grid2, {rx:4}) + cR(340, y + 12, 210 * frac, 8, Q.col, {rx:4}) + cT(550, y + 41, (e.e - NOW) + " min left", {s:13.5, c:CK.mut, a:"end"}); });
+      y0 += 54 + Math.max(1, Math.min(2, nowL.length)) * 66 + 4; }
+    if(opt(m, "donePart", true) && y0 < 470){ b += cL(36, y0, 554, y0, CK.grid2) + cT(36, y0 + 32, "DONE TODAY", {s:13, w:600, c:CK.mut, ls:1.4});
+      wrapT(done.length + " of " + list.length + ":  " + done.map(function(e){ return e.t; }).join(", "), 520, 15, 2).forEach(function(l, k){ b += cT(36, y0 + 62 + k * 20, l, {s:15, c:CK.mut}); }); }
+    b += cR(594, 12, 354, 516, CK.panel, {rx:12}) + cT(616, 50, "REST OF TODAY", {s:13, w:600, c:CK.mut, ls:1.4});
+    var y = 70, tomorrow = opt(m, "tomorrow", true), stopAt = tomorrow ? 330 : 500;
+    up.slice(1).forEach(function(e){ if(y > stopAt) return; b += face(632, y + 16, 14, e.p, fam) + cT(656, y + 21, tmm(e.s), {s:14, c:CK.mut}) + cT(730, y + 22, fitT(e.t, 200, 17, true), {s:17, w:600}); y += 42; });
+    if(tomorrow){ y += 18; b += cL(616, y, 926, y, CK.grid2) + cT(616, y + 30, "TOMORROW MORNING", {s:13, w:600, c:CK.mut, ls:1.4}); y += 50;
+      evts(1).slice(0, 3).forEach(function(e){ if(y > 500) return; b += face(632, y + 16, 14, e.p, fam) + cT(656, y + 21, e.all ? "All day" : tmm(e.s), {s:14, c:CK.mut}) + cT(730, y + 22, fitT(e.t, 200, 17, true), {s:17, w:600}); y += 42; }); }
+    el.innerHTML = calSvg(b, "What's next today");
+  }};
+
+  /* -------------------------------------------- Countdowns ---- */
+  /* From calendars marked as countdown sources (birthdays, holidays) and from
+     big days typed in the Manager. Each tile says where it came from. */
+  var CDCOL = {Birthdays:"#f783ac", Holidays:"#ffd43b", "Big days":"#2bb3e6"};
+  KINDS.calcount = { every:10 * MIN, draw:function(el, m){
+    if(!needCal(el)) return;
+    var fam = famList(), ahead = +opt(m, "ahead", 60) || 60, src = {bday:opt(m, "bday", true), hol:opt(m, "hol", true), big:opt(m, "big", true)}, seen = {}, items = [];
+    var todayT = midnight().getTime();
+    DATA.cal.events.forEach(function(e){
+      if(!calCountdown(e.c)) return;
+      var name = (DATA.cal.calendars[e.c] || {}).name || "", kind = /holiday/i.test(name) ? "Holidays" : /birth/i.test(name) ? "Birthdays" : name || "Countdowns";
+      if(kind === "Holidays" ? !src.hol : !src.bday) return;
+      var at = parseDay(e.d).getTime(), days = Math.round((at - todayT) / (24 * HOUR));
+      if(days < 1 || days > ahead || seen[e.s]) return; seen[e.s] = true;
+      items.push({t:e.s, days:days, at:at, kind:kind, col:CDCOL[kind] || (DATA.cal.calendars[e.c] || {}).color || "#2bb3e6"}); });
+    if(src.big) (CONFIG.bigDays || []).forEach(function(d){ if(!d || !d.t || !/^\d{4}-\d{2}-\d{2}$/.test(d.d || "")) return;
+      var at = parseDay(d.d).getTime(), days = Math.round((at - todayT) / (24 * HOUR));
+      if(days >= 1 && days <= ahead) items.push({t:d.t, days:days, at:at, kind:"Big days", col:CDCOL["Big days"]}); });
+    items.sort(function(a, b){ return a.days - b.days; }); items = items.slice(0, Math.max(1, Math.min(6, +opt(m, "tiles", 4) || 4)));
+    var showToday = opt(m, "today", true), tall = !showToday, k = Math.max(1, items.length), w = (936 - (k - 1) * 8) / k, h = tall ? 516 : 150, b = "";
+    if(!items.length) b += cT(480, tall ? 270 : 90, "Nothing to count down to in the next " + ahead + " days", {s:20, c:CK.mut, a:"middle"});
+    items.forEach(function(c, i){ var x = 12 + i * (w + 8), days = String(c.days), dt = new Date(c.at), big = tall ? Math.min(150, w * .5) : Math.min(64, w * .32);
+      b += cR(x, 12, w, h, CK.panel, {rx:12}) + cR(x + 14, 12, w - 28, 4, c.col, {rx:2});
+      var tagW = Math.min(w - 28, c.kind.length * 7 + 18); b += cR(x + 14, 26, tagW, 20, c.col, {rx:10, op:.22}) + cT(x + 14 + tagW / 2, 40, fitT(c.kind, tagW - 8, 11.5, true), {s:11.5, w:600, c:c.col, a:"middle"});
+      var by = tall ? 12 + h * .58 : 104;
+      b += cT(x + 20, by, days, {s:r1(big), w:300}) + cT(x + 26 + days.length * big * .5, by, days === "1" ? "day" : "days", {s:r1(Math.max(14, big * .28)), c:CK.mut});
+      b += cT(x + 20, tall ? by + 50 : 128, fitT(c.t, w - 34, tall ? 24 : 18, true), {s:tall ? 24 : 18, w:600}) + cT(x + 20, tall ? by + 78 : 150, DAYS[dt.getDay()] + ", " + shortDate(dt), {s:tall ? 16 : 13, c:CK.mut}); });
+    if(showToday){ b += cT(16, 204, "TODAY · " + DAYS[new Date().getDay()].toUpperCase() + ", " + shortDate(new Date()).toUpperCase(), {s:13, w:600, c:CK.accent, ls:1.4});
+      evts(0).slice(0, 12).forEach(function(e, i){ var col = i < 6 ? 0 : 1, x = 16 + col * 472, y = 222 + (i % 6) * 50, g = "", P = fam.by[e.p] || EVERYONE, now = rightNow(0, e);
+        if(now) g += cR(x - 6, y, 456, 44, P.col, {rx:6, op:.18});
+        g += face(x + 16, y + 22, 15, e.p, fam) + cT(x + 42, y + 28, e.all ? "All day" : tmm(e.s), {s:15, c:CK.mut}) + cT(x + 122, y + 29, fitT(e.t, 300, 19, true), {s:19, w:600});
+        if(now) g += chipNow(x + 400, y + 14, P.col);
+        b += cG(past(0, e) ? .4 : 1, g); }); }
+    el.innerHTML = calSvg(b, items.length + " countdowns");
+  }};
+
+
+  /* ================================================ fitness ==== */
+  /* Body battery, sleep and steps from the family's Garmin accounts. The
+     Manager fetches them and publishes them locked, as fitness.enc beside the
+     layout; the board reads that file every half hour. */
+  var FIT_KINDS = ["fitbattery","fitsleep","fitsteps","fitcompare"];
+  function loadFitness(){
+    if(PREVIEW || !hash.k || !onLayout(function(m){ return FIT_KINDS.indexOf(m.type) >= 0; })) return;
+    fetch(fresh("fitness.enc"), {cache:"no-store"}).then(function(r){ if(!r.ok) throw new Error(r.status); return r.text(); })
+      .then(function(t){ return unlock(t); }).then(function(d){ DATA.fit = d; DATA.fitWhy = ""; drawKind.apply(null, FIT_KINDS); })
+      .catch(function(){ if(!DATA.fit){ DATA.fitWhy = "Fitness: no numbers published yet"; drawKind.apply(null, FIT_KINDS); } });
+  }
+  function fitPeople(el){
+    var f = DATA.fit;
+    if(!f || !f.people || !f.people.length){ quietBox(el, DATA.fitWhy || (PREVIEW ? "Fitness: sign people in on the Fitness tab, then get the numbers" : "Fitness loading")); return null; }
+    el.classList.add("wxbox"); return f.people.slice(0, 6);
+  }
+  function fitDays(m){ return Math.max(1, Math.min(7, +opt(m, "days", 1) || 1)); }
+  function lastDays(p, n){ return (p.days || []).slice(0, n).reverse(); }            /* oldest first */
+  function bbColor(v){ return v == null ? "var(--ink-3)" : v >= 60 ? "#3fbf5f" : v >= 30 ? "#f2c94c" : "#e2564a"; }
+  function initial(x, y, r, p){ return cC(x, y, r, p.color || "#4da3ff") + cT(x, y + r * .37, (p.name || "?").charAt(0).toUpperCase(), {s:r1(r * 1.05), w:700, c:CK.dark, a:"middle"}); }
+  function dayLetter(d){ return DAYS[parseDay(d).getDay()].charAt(0); }
+  /* Little bars for the past few days under each person. */
+  function minibars(x, y, w, h, vals, max, colorOf, days){
+    var n = vals.length, bw = w / n, b = "";
+    vals.forEach(function(v, i){ var hh = v == null ? 0 : Math.max(2, h * Math.min(1, v / max)), cx = x + bw * i + bw / 2;
+      b += cR(x + bw * i + bw * .18, y + h - hh, bw * .64, hh, colorOf(v), {rx:3}) + cT(cx, y + h + 16, days[i] ? dayLetter(days[i].d) : "", {s:11, c:CK.mut, a:"middle"}); });
+    return b; }
+
+  KINDS.fitbattery = { every:5 * MIN, draw:function(el, m){
+    var ppl = fitPeople(el); if(!ppl) return;
+    var n = ppl.length, cw = 940 / n, nd = fitDays(m), b = cT(20, 34, "BODY BATTERY", {s:14, w:600, c:CK.mut, ls:1.5});
+    ppl.forEach(function(p, i){ var x = 10 + cw * i, cx = x + cw / 2, today = (p.days || [])[0] || {}, v = today.bb, col = bbColor(v), bwid = Math.min(110, cw * .42), top = 92, bh = nd > 1 ? 250 : 330;
+      b += initial(cx, 66, 18, p);
+      b += cT(cx, 108, fitT(p.name, cw - 20, 22, true), {s:22, w:600, a:"middle"});
+      /* the battery: a body, a cap, and the charge rising inside */
+      var bx = cx - bwid / 2, by = top + 36;
+      b += cR(cx - bwid * .18, by - 12, bwid * .36, 14, "var(--line-2)", {rx:4}) + cR(bx, by, bwid, bh, "var(--panel)", {rx:16, st:"var(--line-2)", sw:3});
+      var fill = v == null ? 0 : (bh - 12) * v / 100;
+      b += cR(bx + 6, by + bh - 6 - fill, bwid - 12, fill, col, {rx:11});
+      if(today.bbHigh != null && today.bb != null && today.bb >= today.bbHigh - 2) b += '<path d="M' + r1(cx + 6) + ' ' + r1(by + bh * .3) + ' l-22 34 h16 l-8 30 l26 -40 h-16 z" style="fill:#fff" opacity=".9"/>';
+      b += cT(cx, by + bh + 52, v == null ? "–" : v, {s:48, w:600, a:"middle", c:col});
+      b += cT(cx, by + bh + 78, today.bbHigh != null ? "high " + today.bbHigh + " · low " + today.bbLow : "", {s:15, c:CK.mut, a:"middle"});
+      if(nd > 1){ var ds = lastDays(p, nd); b += minibars(x + 20, 480, cw - 40, 30, ds.map(function(d){ return d.bbHigh; }), 100, bbColor, ds); } });
+    el.innerHTML = calSvg(b, "Body battery for " + ppl.map(function(p){ return p.name; }).join(", "));
+  }};
+
+  KINDS.fitsleep = { every:15 * MIN, draw:function(el, m){
+    var ppl = fitPeople(el); if(!ppl) return;
+    var n = ppl.length, cw = 940 / n, nd = fitDays(m), b = cT(20, 34, "LAST NIGHT'S SLEEP", {s:14, w:600, c:CK.mut, ls:1.5});
+    /* a few stars for the night sky */
+    [[120,60],[300,40],[520,70],[700,36],[880,64],[410,22],[820,24]].forEach(function(s, k){ b += cC(s[0], s[1], k % 3 ? 1.6 : 2.4, "var(--ink-3)"); });
+    ppl.forEach(function(p, i){ var x = 10 + cw * i, cx = x + cw / 2, last = (p.days || []).filter(function(d){ return d.sleep != null; })[0] || {}, sc = last.sleep, R = Math.min(105, cw * .36), cy = nd > 1 ? 230 : 260;
+      var col = sc == null ? "var(--ink-3)" : sc >= 80 ? "#7c8cff" : sc >= 60 ? "#4da3ff" : "#f2c94c", circ = 2 * Math.PI * R, frac = sc == null ? 0 : sc / 100;
+      b += '<circle cx="' + r1(cx) + '" cy="' + cy + '" r="' + r1(R) + '" style="fill:none;stroke:var(--line)" stroke-width="16"/>' +
+           '<circle cx="' + r1(cx) + '" cy="' + cy + '" r="' + r1(R) + '" style="fill:none;stroke:' + col + '" stroke-width="16" stroke-linecap="round" stroke-dasharray="' + r1(circ * frac) + ' ' + r1(circ) + '" transform="rotate(-90 ' + r1(cx) + ' ' + cy + ')"/>';
+      b += '<path d="M' + r1(cx + 12) + ' ' + (cy - 64) + ' a22 22 0 1 0 14 34 a17 17 0 1 1 -14 -34z" style="fill:var(--ink-2)"/>';
+      b += cT(cx, cy + 18, sc == null ? "–" : sc, {s:54, w:600, a:"middle"}) + cT(cx, cy + 46, last.sleepH ? last.sleepH + " hours" : "", {s:16, c:CK.mut, a:"middle"});
+      b += initial(cx - 50, cy + R + 44, 14, p) + cT(cx - 28, cy + R + 50, fitT(p.name, cw - 80, 20, true), {s:20, w:600});
+      if(nd > 1){ var ds = lastDays(p, nd); b += minibars(x + 20, 470, cw - 40, 34, ds.map(function(d){ return d.sleep; }), 100, function(v){ return v >= 80 ? "#7c8cff" : v >= 60 ? "#4da3ff" : "#f2c94c"; }, ds); } });
+    el.innerHTML = calSvg(b, "Sleep scores for " + ppl.map(function(p){ return p.name; }).join(", "));
+  }};
+
+  KINDS.fitsteps = { every:5 * MIN, draw:function(el, m){
+    var ppl = fitPeople(el); if(!ppl) return;
+    var n = ppl.length, cw = 940 / n, nd = fitDays(m), b = cT(20, 34, "STEPS TODAY", {s:14, w:600, c:CK.mut, ls:1.5});
+    ppl.forEach(function(p, i){ var x = 10 + cw * i, cx = x + cw / 2, t = (p.days || [])[0] || {}, st = t.steps, goal = t.goal || 10000, frac = st == null ? 0 : Math.min(1, st / goal);
+      var trackY = nd > 1 ? 330 : 380, trackH = Math.min(46, cw * .2);
+      b += initial(cx, 80, 26, p) + cT(cx, 136, fitT(p.name, cw - 20, 22, true), {s:22, w:600, a:"middle"});
+      b += cT(cx, 230, st == null ? "–" : Number(st).toLocaleString("en-US"), {s:56, w:600, a:"middle"}) + cT(cx, 262, "of " + Number(goal).toLocaleString("en-US"), {s:17, c:CK.mut, a:"middle"});
+      /* a path of footprints that fills toward the goal */
+      var steps = 8, sw = (cw - 60) / steps;
+      for(var k = 0; k < steps; k++){ var fx = x + 30 + sw * k + sw / 2, fy = trackY + (k % 2 ? 10 : -10), on = (k + 1) / steps <= frac + 1e-9;
+        b += '<ellipse cx="' + r1(fx) + '" cy="' + r1(fy) + '" rx="' + r1(Math.min(9, sw * .22)) + '" ry="' + r1(Math.min(15, sw * .36)) + '" style="fill:' + (on ? (p.color || "#4da3ff") : "var(--line-2)") + '"/>'; }
+      if(frac >= 1) b += cT(cx, trackY + 50, "Goal reached!", {s:18, w:600, c:"#3fbf5f", a:"middle"});
+      if(nd > 1){ var ds = lastDays(p, nd); b += minibars(x + 20, 450, cw - 40, 50, ds.map(function(d){ return d.steps; }), Math.max(goal, 1), function(){ return p.color || "#4da3ff"; }, ds); } });
+    el.innerHTML = calSvg(b, "Steps today for " + ppl.map(function(p){ return p.name; }).join(", "));
+  }};
+
+  /* Everyone side by side: a row per measure, a column per person. With more
+     than one day, each cell shows the run of days. */
+  KINDS.fitcompare = { every:5 * MIN, draw:function(el, m){
+    var ppl = fitPeople(el); if(!ppl) return;
+    var rows = [["battery","Body battery"],["sleep","Sleep score"],["steps","Steps"]].filter(function(r){ return opt(m, r[0], true); });
+    if(!rows.length){ quietBox(el, "Fitness: tick a measure in its settings"); return; }
+    var nd = fitDays(m), x0 = 190, cw = (950 - x0) / ppl.length, top = 100, rh = (530 - top) / rows.length, b = cT(20, 40, nd > 1 ? "THE LAST " + nd + " DAYS" : "TODAY", {s:14, w:600, c:CK.mut, ls:1.5});
+    ppl.forEach(function(p, i){ var cx = x0 + cw * i + cw / 2; b += initial(cx, 46, 20, p) + cT(cx, 86, fitT(p.name, cw - 10, 18, true), {s:18, w:600, a:"middle"}); });
+    var best = {};
+    rows.forEach(function(r){ var vals = ppl.map(function(p){ var d = (p.days || [])[0] || {}; return r[0] === "battery" ? d.bb : r[0] === "sleep" ? ((p.days || []).filter(function(x){ return x.sleep != null; })[0] || {}).sleep : d.steps; });
+      best[r[0]] = Math.max.apply(null, vals.filter(function(v){ return v != null; }).concat([-1])); });
+    rows.forEach(function(r, j){ var y = top + rh * j;
+      b += cL(20, y, 940, y, CK.grid) + cT(24, y + rh / 2 + 6, r[1], {s:19, w:600});
+      ppl.forEach(function(p, i){ var cx = x0 + cw * i + cw / 2, ds = lastDays(p, nd), key = r[0] === "battery" ? "bb" : r[0] === "sleep" ? "sleep" : "steps";
+        var today = r[0] === "sleep" ? ((p.days || []).filter(function(x){ return x.sleep != null; })[0] || {}).sleep : ((p.days || [])[0] || {})[key];
+        var txt = today == null ? "–" : r[0] === "steps" ? Number(today).toLocaleString("en-US") : today, col = r[0] === "battery" ? bbColor(today) : r[0] === "sleep" ? "#7c8cff" : (p.color || "#4da3ff");
+        if(nd === 1){
+          var max = r[0] === "steps" ? Math.max(best.steps, 1) : 100, w = cw * .7, h = 14, fr = today == null ? 0 : Math.min(1, today / max);
+          b += cT(cx, y + rh / 2 - 6, txt, {s:30, w:600, a:"middle"}) + cR(cx - w / 2, y + rh / 2 + 10, w, h, "var(--line)", {rx:7}) + cR(cx - w / 2, y + rh / 2 + 10, w * fr, h, col, {rx:7});
+          if(today != null && today === best[r[0]] && ppl.length > 1) b += cT(cx + w / 2 + 4, y + rh / 2 - 6, "★", {s:22, c:"#ffd43b"});
+        } else {
+          var vals = ds.map(function(d){ return d[key]; }), mx = r[0] === "steps" ? Math.max.apply(null, vals.filter(function(v){ return v != null; }).concat([1])) : 100;
+          b += cT(cx, y + 30, txt, {s:22, w:600, a:"middle"}) + minibars(cx - cw * .4, y + 40, cw * .8, rh - 72, vals, mx, function(){ return col; }, ds);
+        } }); });
+    el.innerHTML = calSvg(b, "Everyone's fitness side by side");
+  }};
+
   /* ========================================================== fonts ==== */
   /* The typefaces a screen or a module may use, with the weights each one
      comes in. All have a plain zero (no dot, no slash). Only the ones a
@@ -923,7 +2350,7 @@ body{
   function measure(){
     var m = device ? Math.max(0, Math.min(10, +device.margin || 0)) : 0;
     stage.style.inset = m + "vh " + m + "vw";
-    stage.style.setProperty("--u", (stage.clientWidth / 100) + "px");
+    stage.style.setProperty("--u", (stage.clientWidth / 100 * Math.max(50, Math.min(200, +setting("textSize") || 100)) / 100) + "px");
     drawAll();
     if("debug" in hash) showDebug();
   }
@@ -935,6 +2362,7 @@ body{
     });
     mods = [];
     Array.prototype.slice.call(stage.querySelectorAll(".screen")).forEach(function(s){ stage.removeChild(s); });
+    markRotated();
     var want = (device && device.screens && device.screens.length) ? device.screens.slice() : (CONFIG.screens[0] ? [CONFIG.screens[0].id] : []);
     loop = want.filter(function(id){ return CONFIG.screens.some(function(s){ return s.id === id; }); });
     /* A button can lead to a screen that is not part of this device's loop,
@@ -950,10 +2378,10 @@ body{
       if(want.indexOf(sc.id) < 0 && !PREVIEW) return;
       var box = document.createElement("div");
       box.className = "screen"; box.dataset.id = sc.id;
-      box.style.background = sc.background || "";
+      box.style.background = sc.background || ""; box.dataset.bg = sc.background || "";
       box.style.fontFamily = family(sc.font);
       (sc.modules || []).forEach(function(m, z){
-        if(m.hidden || !KINDS[m.type]) return;
+        if(m.hidden || !KINDS[m.type] || ROTATED[m.id]) return;
         var el = document.createElement("div");
         el.className = "mod m-" + m.type;
         el.style.left = m.x + "%"; el.style.top = m.y + "%"; el.style.width = m.w + "%"; el.style.height = m.h + "%";
@@ -971,6 +2399,7 @@ body{
       stage.insertBefore(box, $("note"));
     });
     var ids = Array.prototype.map.call(stage.querySelectorAll(".screen"), function(s){ return s.dataset.id; });
+    applyLook(true);
     show(ids.indexOf(shown) >= 0 ? shown : (loop[0] || ids[0] || ""));
     startLoop();
   }
@@ -1202,6 +2631,8 @@ body{
     DATA.cal = data;
     drawKind("calendar", "photos");
     if(moved || !DATA.wx) loadWeather();
+    if(moved){ DATA.wxx = null; DATA.normals = null; DATA.spread = null; DATA.air = null; DATA.windGrid = null; DATA.nwsObs = null; NWSPOINT = null; }
+    extrasIfMissing(); loadAlerts(); applyLook();
     var age = (Date.now() - new Date(data.generated).getTime()) / HOUR;
     var failed = (data.failed || []).map(function(i){ return (data.calendars[i] || {}).name; }).filter(Boolean);
     note("calendar", age > 36 ? "calendar last updated " + MON[new Date(data.generated).getMonth()] + " " + new Date(data.generated).getDate()
@@ -1347,12 +2778,14 @@ body{
     if(wasFeed !== undefined && (CONFIG.nextUpFeed || "") !== wasFeed){ DATA.chores = null; drawKind("nextup"); loadChores(); }   /* the chores moved */
     loadSports();
     if(!DATA.sensors) loadSensors();
+    extrasIfMissing(); applyLook(true); nightCover(); burnShift();
+    if(!DATA.fit) loadFitness();
   }
   var lastDay = isoDay(new Date());
   function start(c){
     useConfig(c);
-    loadCalendar(); setInterval(loadCalendar, 10 * MIN);
-    setInterval(loadWeather, 15 * MIN);
+    loadCalendar(); last.cal = last.wx = Date.now();
+    setInterval(everyMinute, 20000);
     loadChores(); setInterval(loadChores, HOUR);
     setInterval(loadSports, 10 * MIN);
     setInterval(loadSensors, PREVIEW ? 10 * MIN : 2 * MIN);
@@ -1367,6 +2800,8 @@ body{
         var d = ev.data || {};
         if(ev.origin !== location.origin || d.type !== "glance-layout") return;
         TAGS = d.tags || null;
+        PREVIEW_FAST = !!d.fast; PREVIEW_LOOK = d.look == null ? null : +d.look;
+        if(d.fit) DATA.fit = d.fit;
         hash.device = d.device; shown = d.screen || shown;
         useConfig(d.config); loadChores();
       });

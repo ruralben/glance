@@ -7,7 +7,7 @@ secrets from the environment:
                   calendar (name | color | private iCal address)
   BOARD_KEY       the key the data file is locked with
 
-and writes calendar.enc: the next two weeks of events, trimmed to day, time,
+and writes calendar.enc: about six weeks back and three months ahead of events, trimmed to day, time,
 title and which calendar, then encrypted. The repository is public, so what
 lands in it must be unreadable without the key. The key lives only in the
 address the TV opens and in the repository's secrets.
@@ -26,7 +26,8 @@ import icalendar
 import recurring_ical_events
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-DAYS_AHEAD = 14          # today plus this many days
+DAYS_AHEAD = 92          # today plus this many days (countdowns look up to 90 days out)
+DAYS_BACK = 40           # and this many days back (a month view shows the whole month)
 REFRESH_HOURS = 20       # rewrite at least this often, so the board can tell
                          # "nothing changed" from "the job has stopped"
 
@@ -186,7 +187,7 @@ def main():
         raise SystemExit("No calendars in BOARD_SETTINGS.")
     tz = ZoneInfo(settings["tz"])
     now = datetime.datetime.now(tz)
-    first, last = now.date(), now.date() + datetime.timedelta(days=DAYS_AHEAD)
+    first, last = now.date() - datetime.timedelta(days=DAYS_BACK), now.date() + datetime.timedelta(days=DAYS_AHEAD)
 
     old = None
     if a.old and os.path.exists(a.old):
