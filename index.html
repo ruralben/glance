@@ -2303,7 +2303,7 @@ html.lightlook .mapwrap .credit{color:#3b4855; text-shadow:none}
         var today = r[0] === "sleep" ? ((p.days || []).filter(function(x){ return x.sleep != null; })[0] || {}).sleep : ((p.days || [])[0] || {})[key];
         var txt = today == null ? "–" : r[0] === "steps" ? Number(today).toLocaleString("en-US") : today, col = r[0] === "battery" ? bbColor(today) : r[0] === "sleep" ? "#7c8cff" : (p.color || "#4da3ff");
         if(nd === 1){
-          var max = r[0] === "steps" ? Math.max(best.steps, 1) : 100, w = cw * .7, h = 14, fr = today == null ? 0 : Math.min(1, today / max);
+          var max = r[0] === "steps" ? Math.max(best.steps, ((p.days || [])[0] || {}).goal || 10000, 1) : 100, w = cw * .7, h = 14, fr = today == null ? 0 : Math.min(1, today / max);
           b += cT(cx, y + rh / 2 - 6, txt, {s:30, w:600, a:"middle"}) + cR(cx - w / 2, y + rh / 2 + 10, w, h, "var(--line)", {rx:7}) + cR(cx - w / 2, y + rh / 2 + 10, w * fr, h, col, {rx:7});
           if(today != null && today === best[r[0]] && ppl.length > 1) b += cT(cx + w / 2 + 4, y + rh / 2 - 6, "★", {s:22, c:"#ffd43b"});
         } else {
