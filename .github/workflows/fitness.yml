@@ -1,0 +1,65 @@
+# Refreshes the fitness numbers for Glance Digital Wall Calendar.
+# Signs in to Garmin with each person's saved token, fetches steps, body
+# battery and sleep for the last week, and publishes two locked files as the
+# single commit on the "fitness" branch: the numbers (for the board) and the
+# renewed tokens (for the next run). Nothing readable is published: this
+# repository is public, and so is this job's log.
+name: Fitness
+
+on:
+  schedule:
+    - cron: "12,42 * * * *"    # every half hour; GitHub often runs these late
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fitness
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install --quiet "garminconnect==0.3.20" cryptography
+
+      - name: Fetch the renewed tokens from the last run, if there are any
+        run: |
+          if git fetch --quiet origin fitness 2>/dev/null; then
+            git show FETCH_HEAD:tokens.enc > ../old-tokens.enc 2>/dev/null || rm -f ../old-tokens.enc
+          fi
+
+      - name: Fetch the numbers
+        env:
+          GARMIN_TOKENS: ${{ secrets.GARMIN_TOKENS }}
+          GARMIN_KEY: ${{ secrets.GARMIN_KEY }}
+          BOARD_KEY: ${{ secrets.BOARD_KEY }}
+          TZ_NAME: America/Chicago
+        run: python tools/build_fitness.py --old-tokens ../old-tokens.enc --out ../fitness.enc --tokens-out ../tokens.enc
+
+      # The fitness branch is always exactly one commit holding two files. It
+      # is replaced, not added to, so the repository does not grow.
+      - name: Publish them
+        run: |
+          if [ ! -f ../fitness.enc ]; then
+            echo "nothing to publish"
+            exit 0
+          fi
+          git worktree add --quiet --detach ../fit
+          cd ../fit
+          git switch --quiet --orphan fresh
+          git rm -rf --quiet . 2>/dev/null || true
+          cp ../fitness.enc fitness.enc
+          cp ../tokens.enc tokens.enc
+          git add fitness.enc tokens.enc
+          git -c user.name="glance" -c user.email="glance@users.noreply.github.com" \
+              commit --quiet -m "Fitness data"
+          git push --quiet --force origin fresh:fitness
