@@ -10,8 +10,14 @@ secrets from the environment:
   BOARD_KEY      the display key, which locks the numbers the board reads
 
 and writes two files for the "fitness" branch: fitness.enc (steps, body
-battery and sleep for the last seven days, locked with the display key) and
-tokens.enc (the tokens as Garmin renewed them, locked with GARMIN_KEY).
+battery and sleep, locked with the display key) and tokens.enc (the tokens as
+Garmin renewed them, locked with GARMIN_KEY).
+
+Each person keeps a history of up to 90 days. Every run fetches the last
+seven days again (today keeps changing, and a watch can sync late) and fills
+in up to BACKFILL older days not fetched yet, so a new person's history fills
+in over a few runs without one long run. The history rides along in
+tokens.enc between runs and is published in fitness.enc for the display.
 
 Garmin's own Health API is for businesses only, so this uses the unofficial
 garminconnect library; Garmin can change things and break it.
@@ -25,7 +31,10 @@ import os, sys, json, base64, argparse, datetime
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-DAYS = 7
+DAYS = 7          # fetched again on every run
+HISTORY = 90      # days kept per person
+BACKFILL = 21     # older days filled in per run
+KEEP = ("d", "steps", "goal", "bb", "bbHigh", "sleep", "sleepH")
 
 
 def key_bytes(text, name):
@@ -58,10 +67,9 @@ def pick(d, *path):
     return d
 
 
-def fetch(g, today):
+def fetch(g, dates):
     days = []
-    for k in range(DAYS):
-        d = (today - datetime.timedelta(days=k)).isoformat()
+    for d in dates:
         row = {"d": d}
         try:
             s = g.get_user_summary(d) or {}
@@ -76,8 +84,16 @@ def fetch(g, today):
             row["sleepH"] = round(secs / 3600.0, 1) if isinstance(secs, (int, float)) else None
         except Exception:
             pass
-        days.append(row)
+        days.append({k: v for k, v in row.items() if k in KEEP and v is not None})
     return days
+
+
+def merge(old, new, today):
+    """The history, newest first: new rows replace old ones for the same day."""
+    first = (today - datetime.timedelta(days=HISTORY - 1)).isoformat()
+    by = {r["d"]: r for r in old if isinstance(r, dict) and r.get("d")}
+    by.update({r["d"]: r for r in new})
+    return [by[d] for d in sorted(by, reverse=True) if d >= first]
 
 
 def main():
@@ -118,20 +134,27 @@ def main():
         # sent, unless the person has signed in again since (a new signedAt).
         prev = kept.get(x.get("id"))
         token = prev["tokens"] if prev and prev.get("signedAt") == x.get("signedAt") and prev.get("tokens") else x.get("tokens")
-        person = {"id": x.get("id"), "name": x.get("name", ""), "color": x.get("color", "#4da3ff"), "days": []}
+        person = {"id": x.get("id"), "name": x.get("name", ""), "color": x.get("color", "#4da3ff"), "days": [], "hist": []}
         entry = dict(x, tokens=token)
+        hist = (prev or {}).get("hist") or (prev or {}).get("days") or []
+        have = {r.get("d") for r in hist if isinstance(r, dict)}
+        recent = [(today - datetime.timedelta(days=k)).isoformat() for k in range(DAYS)]
+        older = [(today - datetime.timedelta(days=k)).isoformat() for k in range(DAYS, HISTORY)]
+        older = [d for d in older if d not in have][:BACKFILL]
         try:
             g = Garmin()
             g.login(token)
-            person["days"] = fetch(g, today)
+            hist = merge(hist, fetch(g, recent + older), today)
             entry["tokens"] = g.client.dumps()
             ok += 1
-            print("account %d: ok, %d days" % (n, len(person["days"])))
+            print("account %d: ok, %d days kept" % (n, len(hist)))
         except Exception as ex:
             print("account %d: FAILED (%s)" % (n, type(ex).__name__))
-            if prev and prev.get("days"):
-                person["days"] = prev["days"]                # keep showing the last numbers, not a hole
-        entry["days"] = person["days"]
+            hist = merge(hist, [], today)                    # keep showing the last numbers, not a hole
+        person["hist"] = hist
+        person["days"] = [r for r in hist if r["d"] in recent]
+        entry.pop("days", None)
+        entry["hist"] = hist
         renewed["accounts"].append(entry)
         out["people"].append(person)
 

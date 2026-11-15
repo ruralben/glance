@@ -2213,10 +2213,15 @@ html.lightlook .mapwrap .credit{color:#3b4855; text-shadow:none}
      Manager fetches them and publishes them locked, as fitness.enc beside the
      layout; the board reads that file every half hour. Sized to be read from
      across the kitchen: big numbers, few words. */
-  var FIT_KINDS = ["fitbattery","fitsleep","fitsteps","fitcompare"];
+  var FIT_KINDS = ["fitbattery","fitsleep","fitsteps","fitcompare","fitgoals","fitweeks","fitvs","fitbest"];
+  /* The GitHub job keeps its numbers on the "fitness" branch; the Manager's
+     own copy (fitness.enc beside the layout) is the fallback. */
+  function fitnessUrl(){ var m = /^([^.]+)\.github\.io$/.exec(location.hostname), repo = location.pathname.split("/")[1];
+    return m && repo ? "https://raw.githubusercontent.com/" + m[1] + "/" + repo + "/fitness/fitness.enc" : ""; }
   function loadFitness(){
     if(PREVIEW || !hash.k || !onLayout(function(m){ return FIT_KINDS.indexOf(m.type) >= 0; })) return;
-    fetch(fresh("fitness.enc"), {cache:"no-store"}).then(function(r){ if(!r.ok) throw new Error(r.status); return r.text(); })
+    var get = function(u){ return fetch(fresh(u), {cache:"no-store"}).then(function(r){ if(!r.ok) throw new Error(r.status); return r.text(); }); };
+    (fitnessUrl() ? get(fitnessUrl()).catch(function(){ return get("fitness.enc"); }) : get("fitness.enc"))
       .then(function(t){ return unlock(t); }).then(function(d){ DATA.fit = d; DATA.fitWhy = ""; drawKind.apply(null, FIT_KINDS); })
       .catch(function(){ if(!DATA.fit){ DATA.fitWhy = "Fitness: no numbers published yet"; drawKind.apply(null, FIT_KINDS); } });
   }
@@ -2242,11 +2247,15 @@ html.lightlook .mapwrap .credit{color:#3b4855; text-shadow:none}
     vals.forEach(function(v, i){ var hh = v == null ? 0 : Math.max(3, h * Math.min(1, v / max)), cx = x + bw * i + bw / 2;
       b += cR(x + bw * i + bw * .15, y + h - hh, bw * .7, hh, colorOf(v), {rx:4}) + cT(cx, y + h + ls + 4, days[i] ? dayLetter(days[i].d) : "", {s:ls, c:CK.mut, a:"middle"}); });
     return b; }
-  /* A shoe print: the sole and five toes. */
+  /* A footprint: the ball of the foot, a separate heel and five toes, the way
+     a print looks in sand. Drawn about 46 units tall around (x, y). */
   function footprint(x, y, s, col, flip){
     var t = 'translate(' + r1(x) + ' ' + r1(y) + ') scale(' + (flip ? -s : s) + ' ' + s + ')';
-    return '<g transform="' + t + '" style="fill:' + col + '"><path d="M-9 4 C-12 -10 -6 -20 2 -20 C10 -20 12 -10 10 0 C8 10 10 18 6 26 C2 32 -8 30 -9 22 C-10 16 -7 12 -9 4 Z"/>' +
-      '<circle cx="-7" cy="-27" r="3.4"/><circle cx="-1" cy="-30" r="3.6"/><circle cx="5" cy="-29" r="3.2"/><circle cx="10" cy="-25" r="2.8"/><circle cx="13" cy="-20" r="2.3"/></g>'; }
+    return '<g transform="' + t + '" style="fill:' + col + '">' +
+      '<ellipse cx="1.5" cy="-1" rx="10" ry="13" transform="rotate(-10 1.5 -1)"/><ellipse cx="-1" cy="18.5" rx="7.5" ry="7.5"/>' +
+      '<ellipse cx="-5.5" cy="-20.5" rx="4.6" ry="5.4"/><circle cx="2.6" cy="-23" r="3.6"/><circle cx="8.4" cy="-21" r="3.2"/>' +
+      '<circle cx="12.6" cy="-17" r="2.8"/><circle cx="15.2" cy="-12" r="2.4"/></g>'; }
+  function footsteps(x, y, s, col){ return footprint(x, y + 6 * s, s, col, true) + footprint(x + 27 * s, y - 6 * s, s, col, false); }
 
   KINDS.fitbattery = { every:5 * MIN, draw:function(el, m){
     var ppl = fitPeople(el); if(!ppl) return;
@@ -2285,15 +2294,14 @@ html.lightlook .mapwrap .credit{color:#3b4855; text-shadow:none}
   KINDS.fitsteps = { every:5 * MIN, draw:function(el, m){
     var ppl = fitPeople(el); if(!ppl) return;
     var n = ppl.length, cw = 940 / n, nd = fitDays(m), b = title("STEPS TODAY"), name = Math.min(40, cw * .14);
-    b += footprint(250, 52, .62, "var(--ink-3)", false) + footprint(272, 36, .62, "var(--ink-3)", true);
     ppl.forEach(function(p, i){ var x = 10 + cw * i, cx = x + cw / 2, t = (p.days || [])[0] || {}, st = t.steps, goal = t.goal || 10000, frac = st == null ? 0 : Math.min(1, st / goal);
       var col = p.color || "#4da3ff", big = Math.min(130, cw * .34);
       b += nameRow(cx, 112, p, name, cw - 20);
       b += cT(cx, 250, st == null ? "–" : Number(st).toLocaleString("en-US"), {s:r1(big), w:700, a:"middle"});
-      b += cT(cx, 300, "steps", {s:Math.min(38, cw * .12), w:600, c:col, a:"middle"});
+      var ws = Math.min(38, cw * .12);
+      b += footsteps(cx - ws * 1.75, 300 - ws * .3, ws / 50, col) + cT(cx + ws * .55, 300, "steps", {s:ws, w:600, c:col, a:"middle"});
       var bx = x + 30, bw = cw - 60, by = nd > 1 ? 330 : 350, bh = 40;
       b += cR(bx, by, bw, bh, "var(--line)", {rx:20}) + cR(bx, by, Math.max(bh, bw * frac), bh, col, {rx:20});
-      b += footprint(bx + Math.max(bh, bw * frac) - 18, by + bh / 2, .7, CK.dark, false);
       if(nd > 1){ var ds = lastDays(p, nd); b += minibars(x + 24, 410, cw - 48, 70, ds.map(function(d){ return d.steps; }), Math.max(goal, 1), function(){ return col; }, ds, 18); }
       else b += cT(cx, by + bh + 52, (st == null ? "" : Math.round(frac * 100) + "% of the goal · ") + Number(goal).toLocaleString("en-US"), {s:Math.min(28, cw * .09), c:CK.mut, a:"middle"}); });
     el.innerHTML = calSvg(b, "Steps today for " + ppl.map(function(p){ return p.name; }).join(", "));
@@ -2325,6 +2333,117 @@ html.lightlook .mapwrap .credit{color:#3b4855; text-shadow:none}
           b += cT(cx, y + 40, txt, {s:34, w:700, a:"middle"}) + minibars(cx - cw * .42, y + 50, cw * .84, rh - 86, vals, mx, function(){ return col; }, lastDays(p, nd), 16);
         } }); });
     el.innerHTML = calSvg(b, "Everyone's fitness side by side");
+  }};
+
+  /* ------------------------------------------------ fitness history ---- */
+  /* The GitHub job keeps up to 90 days per person (p.hist, newest first);
+     these four modules read it. Before the history fills in they use the
+     last 7 days and say how many days there are so far. Weeks start Sunday. */
+  function addDays(d, n){ var x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() + n); return x; }
+  function histMap(p){ var m = {}; (p.hist || p.days || []).forEach(function(r){ if(r && r.d && !m[r.d]) m[r.d] = r; }); return m; }
+  function histDays(p){ return Object.keys(histMap(p)).length; }
+  var FIT_MEASURES = {
+    steps:{ label:"Steps", get:function(r){ return r.steps; }, fmt:function(v){ return Number(Math.round(v)).toLocaleString("en-US"); }, unit:"steps a day" },
+    sleep:{ label:"Sleep score", get:function(r){ return r.sleep; }, fmt:function(v){ return String(Math.round(v)); }, unit:"sleep score" },
+    battery:{ label:"Body battery", get:function(r){ return r.bbHigh != null ? r.bbHigh : r.bb; }, fmt:function(v){ return String(Math.round(v)); }, unit:"each morning" }
+  };
+  function fitMeasure(m){ return FIT_MEASURES[opt(m, "measure", "steps")] || FIT_MEASURES.steps; }
+  function avg(list){ var v = list.filter(function(x){ return x != null; }); return v.length ? v.reduce(function(a, b){ return a + b; }, 0) / v.length : null; }
+  /* Values for the n days ending `back` days before today, oldest first. */
+  function span(map, get, n, back){ var t = new Date(), out = [];
+    for(var k = n - 1 + (back || 0); k >= (back || 0); k--){ var r = map[isoDay(addDays(t, -k))]; out.push(r ? get(r) : null); } return out; }
+  function goalMet(r){ return !!r && r.steps != null && r.steps >= (r.goal || 10000); }
+  function stillBuilding(p){ var n = histDays(p); return n < 14 ? n + (n === 1 ? " day so far" : " days so far") : ""; }
+
+  /* A calendar of squares, one per day: how close each person came to their
+     step goal. A full square is the goal met; today has a ring. */
+  KINDS.fitgoals = { every:5 * MIN, draw:function(el, m){
+    var ppl = fitPeople(el); if(!ppl) return;
+    var weeks = Math.max(4, Math.min(13, +opt(m, "weeks", 8) || 8)), n = ppl.length, cw = 940 / n, b = title("STEP GOALS · " + weeks + " WEEKS");
+    var today = new Date(), start = addDays(today, -today.getDay() - 7 * (weeks - 1));        /* the Sunday that begins the first week */
+    var cell = Math.min((cw - 40) / weeks, 300 / 7), gw = cell * weeks, name = Math.min(40, cw * .14);
+    var gy = 130 + Math.max(0, (300 - cell * 7) / 2);                                          /* small grids sit in the middle */
+    ppl.forEach(function(p, i){ var x = 10 + cw * i + (cw - gw) / 2, map = histMap(p), col = p.color || "#4da3ff", met = 0, counted = 0;
+      b += nameRow(10 + cw * i + cw / 2, 100, p, name, cw - 20);
+      if(i === 0 || n <= 2) "SMTWTFS".split("").forEach(function(L, d){ b += cT(x - 10, gy + cell * d + cell * .62, L, {s:r1(Math.min(18, cell * .42)), c:CK.mut, a:"end"}); });
+      for(var w = 0; w < weeks; w++) for(var d = 0; d < 7; d++){
+        var day = addDays(start, w * 7 + d); if(day > today) continue;
+        var r = map[isoDay(day)], fr = r && r.steps != null ? r.steps / (r.goal || 10000) : null, cx = x + cell * w + cell * .08, cy = gy + cell * d + cell * .08, s = cell * .84;
+        if(fr != null){ counted++; if(fr >= 1) met++; }
+        b += fr == null ? cR(cx, cy, s, s, "none", {rx:r1(s * .2), st:"var(--line)", sw:2}) :
+             cR(cx, cy, s, s, fr >= 1 ? col : "var(--line)", {rx:r1(s * .2)}) + (fr < 1 && fr > 0 ? cR(cx, cy, s, s, col, {rx:r1(s * .2), op:r1(.15 + .55 * fr)}) : "");
+        if(isoDay(day) === isoDay(today)) b += cR(cx - 3, cy - 3, s + 6, s + 6, "none", {rx:r1(s * .25), st:CK.ink, sw:3}); }
+      var note = stillBuilding(p);
+      b += cT(10 + cw * i + cw / 2, gy + cell * 7 + 42, counted ? "Goal met " + met + " of " + counted + " days" : "No steps yet", {s:r1(Math.min(30, cw * .085)), w:600, a:"middle"});
+      if(note) b += cT(10 + cw * i + cw / 2, gy + cell * 7 + 72, "Filling in: " + note, {s:r1(Math.min(20, cw * .06)), c:CK.mut, a:"middle"}); });
+    el.innerHTML = calSvg(b, "Step goals for the last " + weeks + " weeks");
+  }};
+
+  /* One bar per week: the week's daily average, this week's bar bright. Every
+     person is on the same scale, so the bars compare fairly. */
+  KINDS.fitweeks = { every:5 * MIN, draw:function(el, m){
+    var ppl = fitPeople(el); if(!ppl) return;
+    var M = fitMeasure(m), weeks = Math.max(4, Math.min(12, +opt(m, "weeks", 8) || 8)), n = ppl.length, cw = 940 / n, b = title(M.label.toUpperCase() + " · WEEK BY WEEK");
+    var today = new Date(), first = addDays(today, -today.getDay() - 7 * (weeks - 1)), name = Math.min(40, cw * .14);
+    var all = ppl.map(function(p){ var map = histMap(p), out = [];
+      for(var w = 0; w < weeks; w++){ var vals = [];
+        for(var d = 0; d < 7; d++){ var day = addDays(first, w * 7 + d); if(day > today) break; var r = map[isoDay(day)]; if(r) vals.push(M.get(r)); }
+        out.push(avg(vals)); } return out; });
+    var max = Math.max.apply(null, [].concat.apply([1], all.map(function(a){ return a.filter(function(v){ return v != null; }); })));
+    ppl.forEach(function(p, i){ var x = 10 + cw * i + 24, w = cw - 48, bw = w / weeks, top = 204, h = 236, col = p.color || "#4da3ff", vals = all[i], now = vals[weeks - 1];
+      b += nameRow(10 + cw * i + cw / 2, 100, p, name, cw - 20);
+      b += cT(10 + cw * i + cw / 2, 152, now == null ? "–" : M.fmt(now), {s:r1(Math.min(44, cw * .13)), w:700, a:"middle"}) +
+           cT(10 + cw * i + cw / 2, 180, M === FIT_MEASURES.steps ? "a day, this week" : "this week", {s:r1(Math.min(20, cw * .06)), c:CK.mut, a:"middle"});
+      vals.forEach(function(v, k){ var hh = v == null ? 0 : Math.max(4, h * v / max), last = k === weeks - 1;
+        b += cR(x + bw * k + bw * .14, top + h - hh, bw * .72, hh, col, {rx:5, op:last ? 1 : .42}); });
+      b += cL(x, top + h + 2, x + w, top + h + 2, CK.grid, 2);
+      b += cT(x, top + h + 34, shortDate(first), {s:r1(Math.min(22, cw * .07)), c:CK.mut}) + cT(x + w, top + h + 34, "This week", {s:r1(Math.min(22, cw * .07)), w:600, c:col, a:"end"});
+      var note = stillBuilding(p); if(note) b += cT(10 + cw * i + cw / 2, top + h + 66, "Filling in: " + note, {s:r1(Math.min(18, cw * .055)), c:CK.mut, a:"middle"}); });
+    el.innerHTML = calSvg(b, M.label + " week by week");
+  }};
+
+  /* The last 7 days against the 7 before them, as one big number and an arrow. */
+  KINDS.fitvs = { every:5 * MIN, draw:function(el, m){
+    var ppl = fitPeople(el); if(!ppl) return;
+    var M = fitMeasure(m), n = ppl.length, cw = 940 / n, b = title(M.label.toUpperCase() + " · THIS WEEK VS. LAST"), name = Math.min(40, cw * .14);
+    ppl.forEach(function(p, i){ var cx = 10 + cw * i + cw / 2, map = histMap(p), a = avg(span(map, M.get, 7, 0)), was = avg(span(map, M.get, 7, 7));
+      b += nameRow(cx, 100, p, name, cw - 20);
+      b += cT(cx, 250, a == null ? "–" : M.fmt(a), {s:r1(Math.min(120, cw * .3)), w:700, a:"middle"});
+      b += cT(cx, 292, M.unit, {s:r1(Math.min(28, cw * .085)), c:CK.mut, a:"middle"});
+      if(a != null && was != null){ var diff = a - was, up = diff >= 0, same = Math.abs(diff) < (M === FIT_MEASURES.steps ? 100 : 1), col = same ? CK.mut : up ? "#3fbf5f" : "#f0a93b";
+        var ay = 360, s = Math.min(34, cw * .1);
+        b += same ? cT(cx, ay + 14, "About the same", {s:r1(s * 1.1), w:700, c:col, a:"middle"}) :
+          '<path d="M' + r1(cx - s * 3.4) + ' ' + r1(ay + (up ? s * .5 : -s * .5)) + ' l' + r1(s * .7) + ' ' + r1(up ? -s : s) + ' l' + r1(s * .7) + ' ' + r1(up ? s : -s) + 'z" style="fill:' + col + '"/>' +
+          cT(cx - s * 1.7, ay + s * .45, (up ? "+" : "−") + M.fmt(Math.abs(diff)), {s:r1(s * 1.3), w:700, c:col});
+        b += cT(cx, 440, "The week before: " + M.fmt(was), {s:r1(Math.min(24, cw * .075)), c:CK.mut, a:"middle"});
+      } else b += cT(cx, 380, "Needs two weeks of numbers", {s:r1(Math.min(24, cw * .075)), c:CK.mut, a:"middle"}); });
+    el.innerHTML = calSvg(b, M.label + ", this week against last week");
+  }};
+
+  /* Streaks and personal bests from the history. */
+  KINDS.fitbest = { every:5 * MIN, draw:function(el, m){
+    var ppl = fitPeople(el); if(!ppl) return;
+    var n = ppl.length, cw = 940 / n, name = Math.min(40, cw * .14), oldest = null;
+    ppl.forEach(function(p){ (p.hist || p.days || []).forEach(function(r){ if(r.d && (!oldest || r.d < oldest)) oldest = r.d; }); });
+    var b = title("STREAKS AND BESTS" + (oldest ? " · SINCE " + shortDate(parseDay(oldest)).toUpperCase() : ""));
+    ppl.forEach(function(p, i){ var cx = 10 + cw * i + cw / 2, map = histMap(p), col = p.color || "#4da3ff", rows = (p.hist || p.days || []).slice();
+      /* Today counts once its goal is met; until then the streak runs to yesterday. */
+      var t = new Date(), k = goalMet(map[isoDay(t)]) ? 0 : 1, streak = 0;
+      while(goalMet(map[isoDay(addDays(t, -k))])){ streak++; k++; }
+      var run = 0, longest = 0; rows.slice().sort(function(a, b2){ return a.d < b2.d ? -1 : 1; }).forEach(function(r, j, arr){
+        var next = j && addDays(parseDay(arr[j - 1].d), 1).getTime() === parseDay(r.d).getTime();
+        run = goalMet(r) ? (next ? run + 1 : 1) : 0; if(run > longest) longest = run; });
+      function best(get){ var top = null; rows.forEach(function(r){ var v = get(r); if(v != null && (!top || v > top.v)) top = {v:v, d:r.d}; }); return top; }
+      var bs = best(function(r){ return r.steps; }), bl = best(function(r){ return r.sleep; });
+      var stats = [[streak + (streak === 1 ? " day" : " days"), "goal streak now", col],
+                   [longest + (longest === 1 ? " day" : " days"), "longest streak", CK.ink],
+                   [bs ? Number(bs.v).toLocaleString("en-US") : "–", bs ? "most steps · " + shortDate(parseDay(bs.d)) : "most steps", CK.ink],
+                   [bl ? String(bl.v) : "–", bl ? "best sleep · " + shortDate(parseDay(bl.d)) : "best sleep", CK.ink]];
+      var big = Math.min(58, cw * .17), small = Math.min(22, cw * .066);
+      b += nameRow(cx, 100, p, name, cw - 20);
+      stats.forEach(function(s, j){ var y = 178 + j * 96;
+        b += cT(cx, y, s[0], {s:r1(big), w:700, c:s[2], a:"middle"}) + cT(cx, y + small + 8, s[1], {s:r1(small), c:CK.mut, a:"middle"}); }); });
+    el.innerHTML = calSvg(b, "Streaks and bests for " + ppl.map(function(p){ return p.name; }).join(", "));
   }};
 
   /* ========================================================== fonts ==== */
