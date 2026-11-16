@@ -2217,12 +2217,13 @@ html.lightlook .mapwrap .credit{color:#3b4855; text-shadow:none}
 
 
   /* ================================================ fitness ==== */
-  /* Body battery, sleep, steps, stress, heart rate and active minutes from the
+  /* Body battery, sleep, steps, stress, heart rate, activity minutes and more from the
      family's Garmin accounts, and workouts from Strava. The GitHub fitness job
      fetches them every half hour and publishes them locked on the "fitness"
      branch; the board reads that file every half hour. Sized to be read from
      across the kitchen: big numbers, few words. */
   var FIT_KINDS = ["fitbattery","fitsleep","fitsteps","fitcompare","fitgoals","fitweeks","fitvs","fitbest","fitbbday","fitstress","fitrhr","fitstages","fitactive",
+                   "fitcal","fitdist","fitbbcd","fitins",
                    "svlatest","svweek","svyear","svfeed","svrecords","svmap"];
   /* The GitHub job keeps its numbers on the "fitness" branch; the Manager's
      own copy (fitness.enc beside the layout) is the fallback. */
@@ -2325,25 +2326,33 @@ html.lightlook .mapwrap .credit{color:#3b4855; text-shadow:none}
      than one day, each cell shows the run of days. */
   KINDS.fitcompare = { every:5 * MIN, draw:function(el, m){
     var ppl = fitPeople(el, m); if(!ppl) return;
-    var rows = [["battery","Battery"],["sleep","Sleep"],["steps","Steps"]].filter(function(r){ return opt(m, r[0], true); });
+    var rows = [["battery","Battery"],["sleep","Sleep"],["steps","Steps"],["active","Activity"]].filter(function(r){ return opt(m, r[0], true); });
     if(!rows.length){ quietBox(el, "Fitness: tick a measure in its settings"); return; }
     var nd = fitDays(m), x0 = 230, cw = (950 - x0) / ppl.length, top = 118, rh = (536 - top) / rows.length, b = title(nd > 1 ? "THE LAST " + nd + " DAYS" : "TODAY");
     var name = Math.min(36, cw * .16);
     ppl.forEach(function(p, i){ b += nameRow(x0 + cw * i + cw / 2, 96, p, name, cw - 10); });
     var best = {};
-    function val(p, key){ var d = (p.days || [])[0] || {}; return key === "battery" ? d.bb : key === "sleep" ? lastSleep(p).sleep : d.steps; }
+    function val(p, key){ var d = (p.days || [])[0] || {}; return key === "battery" ? d.bb : key === "sleep" ? lastSleep(p).sleep : key === "active" ? actMin(p).today : d.steps; }
     rows.forEach(function(r){ var vals = ppl.map(function(p){ return val(p, r[0]); }).filter(function(v){ return v != null; }); best[r[0]] = vals.length ? Math.max.apply(null, vals) : null; });
     rows.forEach(function(r, j){ var y = top + rh * j;
-      b += cL(20, y, 940, y, CK.grid, 2) + cT(24, y + rh / 2 + 14, r[1], {s:38, w:700});
+      b += cL(20, y, 940, y, CK.grid, 2) + (r[0] === "active" ? cT(24, y + rh / 2 + 2, r[1], {s:38, w:700}) + cT(24, y + rh / 2 + 32, "minutes", {s:26, c:CK.mut})
+                                                     : cT(24, y + rh / 2 + 14, r[1], {s:38, w:700}));
       ppl.forEach(function(p, i){ var cx = x0 + cw * i + cw / 2, key = r[0] === "battery" ? "bb" : r[0], today = val(p, r[0]);
         var txt = today == null ? "–" : r[0] === "steps" ? Number(today).toLocaleString("en-US") : today;
         var col = r[0] === "battery" ? bbColor(today) : r[0] === "sleep" ? sleepColor(today) : (p.color || "#4da3ff");
+        if(r[0] === "active" && nd === 1){                  /* today's minutes and the week's, side by side */
+          var am = actMin(p), hw = cw / 2, ns = r1(Math.min(56, rh * .44, cw * .2)), ls = r1(Math.min(22, cw * .08)), by = y + rh / 2 + 8;
+          b += cT(cx - hw / 2, by, txt, {s:ns, w:700, a:"middle"}) + cT(cx - hw / 2, by + ls + 8, "today", {s:ls, c:CK.mut, a:"middle"});
+          b += cT(cx + hw / 2, by, am.week, {s:ns, w:700, c:am.week >= am.goal ? "#3fbf5f" : col, a:"middle"}) + cT(cx + hw / 2, by + ls + 8, "this week", {s:ls, c:CK.mut, a:"middle"});
+          if(today != null && today === best.active && ppl.length > 1) b += cT(cx - hw / 2 + ns * .7, by - ns * .55, "★", {s:30, c:"#ffd43b"});
+          return;
+        }
         if(nd === 1){
           var goal = ((p.days || [])[0] || {}).goal || 10000, max = r[0] === "steps" ? Math.max(goal, 1) : 100, w = cw * .78, h = 22, fr = today == null ? 0 : Math.min(1, today / max);
           b += cT(cx, y + rh / 2 + 4, txt, {s:r1(Math.min(64, rh * .5)), w:700, a:"middle"}) + cR(cx - w / 2, y + rh / 2 + 22, w, h, "var(--line)", {rx:11}) + cR(cx - w / 2, y + rh / 2 + 22, Math.max(h, w * fr), h, col, {rx:11});
           if(today != null && today === best[r[0]] && ppl.length > 1) b += cT(cx + w / 2 - 10, y + rh / 2 - 20, "★", {s:34, c:"#ffd43b"});
         } else {
-          var vals = lastDays(p, nd).map(function(d){ return key === "bb" ? d.bb : d[key]; }), mx = r[0] === "steps" ? Math.max.apply(null, vals.filter(function(v){ return v != null; }).concat([1])) : 100;
+          var vals = lastDays(p, nd).map(function(d){ return key === "bb" ? d.bb : key === "active" ? actDay(d) : d[key]; }), mx = r[0] === "steps" || r[0] === "active" ? Math.max.apply(null, vals.filter(function(v){ return v != null; }).concat([1])) : 100;
           b += cT(cx, y + 40, txt, {s:34, w:700, a:"middle"}) + minibars(cx - cw * .42, y + 50, cw * .84, rh - 86, vals, mx, function(){ return col; }, lastDays(p, nd), 16);
         } }); });
     el.innerHTML = calSvg(fitDim(b, ppl), "Everyone's fitness side by side");
@@ -2562,20 +2571,125 @@ html.lightlook .mapwrap .credit{color:#3b4855; text-shadow:none}
     el.innerHTML = calSvg(fitDim(b, ppl), "Last night's sleep stages");
   }};
 
-  /* Active minutes this week toward Garmin's goal (150 unless set); vigorous count double. Garmin's week starts Monday. */
+  /* Activity minutes (Garmin calls them intensity minutes): moderate minutes
+     plus vigorous ones counted double, toward Garmin's weekly goal (150 unless
+     set). Garmin's week starts Monday. */
+  function actDay(r){ return r && (r.imod != null || r.ivig != null) ? (r.imod || 0) + 2 * (r.ivig || 0) : null; }
+  function actMin(p){ var map = histMap(p), t = new Date(), back = (t.getDay() + 6) % 7, o = {today:null, week:0, mod:0, vig:0, goal:150};
+    for(var k = 0; k <= back; k++){ var r = map[isoDay(addDays(t, -k))]; if(!r) continue;
+      var v = actDay(r); if(k === 0) o.today = v;
+      o.week += v || 0; o.mod += r.imod || 0; o.vig += r.ivig || 0; if(r.igoal) o.goal = r.igoal; }
+    return o; }
   KINDS.fitactive = { every:5 * MIN, draw:function(el, m){
     var ppl = fitPeople(el, m); if(!ppl) return;
-    var n = ppl.length, cw = 940 / n, b = title("ACTIVE MINUTES THIS WEEK"), name = Math.min(34, cw * .13), today = new Date(), back = (today.getDay() + 6) % 7;
-    ppl.forEach(function(p, i){ b += '<g data-f="cell">'; var cx = 10 + cw * i + cw / 2, map = histMap(p), mod = 0, vig = 0, goal = 150;
-      for(var k = 0; k <= back; k++){ var r = map[isoDay(addDays(today, -k))]; if(r){ mod += r.imod || 0; vig += r.ivig || 0; if(r.igoal) goal = r.igoal; } }
-      var tot = mod + vig * 2, fr = Math.min(1, tot / goal), R0 = Math.min(92, cw * .34), cy = 272, circ = 2 * Math.PI * R0, col = p.color || "#4da3ff";
+    var n = ppl.length, cw = 940 / n, b = title("ACTIVITY MINUTES THIS WEEK"), name = Math.min(34, cw * .13);
+    ppl.forEach(function(p, i){ b += '<g data-f="cell">'; var cx = 10 + cw * i + cw / 2, am = actMin(p), mod = am.mod, vig = am.vig, goal = am.goal;
+      var tot = am.week, fr = Math.min(1, tot / goal), R0 = Math.min(92, cw * .34), cy = 272, circ = 2 * Math.PI * R0, col = p.color || "#4da3ff";
       b += nameRow(cx, 104, p, name, cw - 20);
       b += '<circle cx="' + r1(cx) + '" cy="' + cy + '" r="' + r1(R0) + '" style="fill:none;stroke:var(--line-2)" stroke-width="22"/>';
       if(fr > 0) b += '<circle cx="' + r1(cx) + '" cy="' + cy + '" r="' + r1(R0) + '" style="fill:none;stroke:' + col + '" stroke-width="22" stroke-linecap="round" stroke-dasharray="' + r1(circ * fr) + ' ' + r1(circ) + '" transform="rotate(-90 ' + r1(cx) + ' ' + cy + ')"/>';
       b += cT(cx, cy + 16, tot, {s:r1(Math.min(58, R0 * .62)), w:700, a:"middle"}) + cT(cx, cy + 46, "of " + goal, {s:r1(Math.min(24, R0 * .26)), c:CK.mut, a:"middle"});
       b += cT(cx, 424, mod + " moderate", {s:Math.min(26, cw * .09), c:CK.mut, a:"middle"}) + cT(cx, 458, vig + " vigorous × 2", {s:Math.min(26, cw * .09), c:CK.mut, a:"middle"});
       if(tot >= goal) b += cT(cx, 502, "Goal met", {s:28, w:700, c:"#3fbf5f", a:"middle"}); b += '</g>'; });
-    el.innerHTML = calSvg(fitDim(b, ppl), "Active minutes this week");
+    el.innerHTML = calSvg(fitDim(b, ppl), "Activity minutes this week");
+  }};
+
+  function n0(v){ return Number(Math.round(v)).toLocaleString("en-US"); }
+  /* A flame, about 72 units tall around (x, y). */
+  function flame(x, y, s, col){ return '<g transform="translate(' + r1(x) + ' ' + r1(y) + ') scale(' + r1(s) + ')">' +
+    '<path d="M2 -36 C4 -22 26 -12 26 10 C26 26 14 36 0 36 C-14 36 -26 26 -26 10 C-26 -4 -16 -12 -12 -22 C-10 -10 -4 -6 0 -4 C-2 -16 -4 -26 2 -36 Z" style="fill:' + col + '"/>' +
+    '<path d="M0 6 C8 14 12 20 12 26 C12 32 6 36 0 36 C-6 36 -12 32 -12 26 C-12 18 -4 14 0 6 Z" style="fill:#ffd43b"/></g>'; }
+  /* A map pin over a dotted trail, about 70 units across around (x, y). */
+  function trail(x, y, s, col){ var g = '<g transform="translate(' + r1(x) + ' ' + r1(y) + ') scale(' + r1(s) + ')">';
+    [[-34, 26], [-22, 30], [-10, 28], [2, 22]].forEach(function(q){ g += '<circle cx="' + q[0] + '" cy="' + q[1] + '" r="3.4" style="fill:' + col + '" opacity=".7"/>'; });
+    return g + '<path d="M18 22 C10 10 4 2 4 -8 a14 14 0 0 1 28 0 C32 2 26 10 18 22 Z" style="fill:' + col + '"/><circle cx="18" cy="-8" r="5.5" style="fill:var(--bg)"/></g>'; }
+
+  /* Calories burned: active calories (from moving), with the day's total under them. */
+  KINDS.fitcal = { every:5 * MIN, draw:function(el, m){
+    var ppl = fitPeople(el, m); if(!ppl) return;
+    var n = ppl.length, cw = 940 / n, nd = fitDays(m), b = title(nd > 1 ? "CALORIES BURNED" : "CALORIES BURNED TODAY"), name = Math.min(40, cw * .14);
+    ppl.forEach(function(p, i){ b += '<g data-f="cell">'; var x = 10 + cw * i, cx = x + cw / 2, t = (p.days || [])[0] || {}, v = t.kcal, big = Math.min(120, cw * .3);
+      b += nameRow(cx, 106, p, name, cw - 20) + flame(cx, 168, Math.min(1, cw / 260), "#f0802c");
+      b += cT(cx, 312, v == null ? "–" : n0(v), {s:r1(big), w:700, a:"middle"}) + cT(cx, 352, "active calories", {s:Math.min(28, cw * .09), c:CK.mut, a:"middle"});
+      if(nd > 1){ var ds = lastDays(p, nd), vals = ds.map(function(d){ return d.kcal; });
+        b += minibars(x + 24, 392, cw - 48, 80, vals, Math.max.apply(null, vals.filter(function(q){ return q != null; }).concat([1])), function(){ return "#f0802c"; }, ds, 18); }
+      else if(t.kcalT != null) b += cT(cx, 412, n0(t.kcalT) + " in all", {s:Math.min(28, cw * .09), w:600, a:"middle"}) + cT(cx, 446, "counting rest too", {s:Math.min(22, cw * .075), c:CK.mut, a:"middle"});
+      b += '</g>'; });
+    el.innerHTML = calSvg(fitDim(b, ppl), "Calories burned for " + ppl.map(function(p){ return p.name; }).join(", "));
+  }};
+
+  /* Distance walked and run, counted by the watch from every step. */
+  KINDS.fitdist = { every:5 * MIN, draw:function(el, m){
+    var ppl = fitPeople(el, m); if(!ppl) return;
+    var km = opt(m, "units", "mi") === "km", per = km ? 1000 : 1609.344, unit = km ? "kilometers" : "miles";
+    var n = ppl.length, cw = 940 / n, nd = fitDays(m), b = title(nd > 1 ? "DISTANCE" : "DISTANCE TODAY"), name = Math.min(40, cw * .14);
+    ppl.forEach(function(p, i){ b += '<g data-f="cell">'; var x = 10 + cw * i, cx = x + cw / 2, t = (p.days || [])[0] || {}, v = t.dist == null ? null : t.dist / per, big = Math.min(120, cw * .3), col = p.color || "#4da3ff";
+      b += nameRow(cx, 106, p, name, cw - 20) + trail(cx, 168, Math.min(1.1, cw / 240), col);
+      b += cT(cx, 312, v == null ? "–" : v.toFixed(1), {s:r1(big), w:700, a:"middle"}) + cT(cx, 352, unit + " walked and run", {s:Math.min(28, cw * .085), c:CK.mut, a:"middle"});
+      if(nd > 1){ var ds = lastDays(p, nd), vals = ds.map(function(d){ return d.dist == null ? null : d.dist / per; });
+        b += minibars(x + 24, 392, cw - 48, 80, vals, Math.max.apply(null, vals.filter(function(q){ return q != null; }).concat([.1])), function(){ return col; }, ds, 18);
+        var tot = vals.reduce(function(a, q){ return a + (q || 0); }, 0); b += cT(cx, 528, tot.toFixed(1) + " in " + nd + " days", {s:Math.min(22, cw * .075), c:CK.mut, a:"middle"}); }
+      b += '</g>'; });
+    el.innerHTML = calSvg(fitDim(b, ppl), "Distance for " + ppl.map(function(p){ return p.name; }).join(", "));
+  }};
+
+  /* Body battery charged and used: today as two bars, or a run of days as
+     bars above (charged) and below (used) a center line. */
+  KINDS.fitbbcd = { every:5 * MIN, draw:function(el, m){
+    var ppl = fitPeople(el, m); if(!ppl) return;
+    var GREEN = "#3fbf5f", ORANGE = "#f0802c", n = ppl.length, cw = 940 / n, nd = fitDays(m), b = title(nd > 1 ? "BODY BATTERY CHARGED AND USED" : "CHARGED AND USED TODAY"), name = Math.min(40, cw * .14);
+    function cd(p, r, first){ var t = first ? todayOf(p) || {} : {}; return [r.bbUp != null ? r.bbUp : t.charged, r.bbDown != null ? r.bbDown : t.drained]; }
+    ppl.forEach(function(p, i){ b += '<g data-f="cell">'; var x = 10 + cw * i, cx = x + cw / 2, v = cd(p, (p.days || [])[0] || {}, true), w = cw * .74, big = r1(Math.min(72, cw * .22));
+      b += nameRow(cx, 104, p, name, cw - 20);
+      if(nd === 1){
+        [[v[0], "+", "charged", GREEN, 200], [v[1], "−", "used", ORANGE, 360]].forEach(function(q){ var y = q[4];
+          b += cT(cx, y, q[0] == null ? "–" : q[1] + q[0], {s:big, w:700, c:q[3], a:"middle"}) + cT(cx, y + 36, q[2], {s:Math.min(26, cw * .085), c:CK.mut, a:"middle"});
+          b += cR(cx - w / 2, y + 52, w, 22, "var(--line)", {rx:11}) + (q[0] ? cR(cx - w / 2, y + 52, Math.max(22, w * Math.min(1, q[0] / 100)), 22, q[3], {rx:11}) : ""); });
+      } else {
+        var ds = lastDays(p, nd), bw = (cw - 48) / nd, mid = 330, hh = 130;
+        b += cT(cx - 10, 172, v[0] == null ? "–" : "+" + v[0], {s:r1(big * .62), w:700, c:GREEN, a:"end"}) + cT(cx + 10, 172, v[1] == null ? "–" : "−" + v[1], {s:r1(big * .62), w:700, c:ORANGE});
+        b += cT(cx, 200, "today", {s:Math.min(22, cw * .075), c:CK.mut, a:"middle"});
+        ds.forEach(function(d, k){ var q = cd(p, d, k === ds.length - 1 && d === (p.days || [])[0]), bx = x + 24 + bw * k + bw * .15, ww = bw * .7;
+          if(q[0]) b += cR(bx, mid - 2 - hh * Math.min(1, q[0] / 100), ww, hh * Math.min(1, q[0] / 100), GREEN, {rx:4});
+          if(q[1]) b += cR(bx, mid + 2, ww, hh * Math.min(1, q[1] / 100), ORANGE, {rx:4});
+          b += cT(bx + ww / 2, mid + hh + 30, dayLetter(d.d), {s:18, c:CK.mut, a:"middle"}); });
+        b += cL(x + 20, mid, x + cw - 20, mid, CK.grid, 2);
+      }
+      b += '</g>'; });
+    el.innerHTML = calSvg(fitDim(b, ppl), "Body battery charged and used for " + ppl.map(function(p){ return p.name; }).join(", "));
+  }};
+
+  /* Recovery and fitness: what each watch works out about the body, as a
+     table with a row for each reading anyone has. A watch that does not
+     record a reading leaves its cell empty. A reading from an earlier night
+     says which day it is from. */
+  var INS = [
+    ["hrv", "HRV status", function(x){ return [x.v + " ms", {BALANCED:["Balanced", "#3fbf5f"], UNBALANCED:["Unbalanced", "#f0a93b"], LOW:["Low", "#f0802c"], POOR:["Poor", "#e2564a"]}[x.st] || ["", ""]]; }],
+    ["ready", "Readiness", function(x){ return [x.v, {PRIME:["Prime", "#3fbf5f"], HIGH:["High", "#3fbf5f"], MODERATE:["Moderate", "#f2c94c"], LOW:["Low", "#f0802c"], POOR:["Poor", "#e2564a"]}[x.lvl] || ["", ""]]; }],
+    ["tstat", "Training", function(x){ var w = x.st.charAt(0) + x.st.slice(1).toLowerCase().replace(/_/g, " ");
+      return [w, ["", /^(PRODUCTIVE|PEAKING)/.test(x.st) ? "#3fbf5f" : /^(UNPRODUCTIVE|OVERREACHING|STRAINED)/.test(x.st) ? "#f0a93b" : CK.mut]]; }],
+    ["vo2", "VO2 max", function(x){ return [x.v, ["", ""]]; }],
+    ["fage", "Fitness age", function(x){ return [x.v, [x.age ? "actual " + x.age : "", x.age && x.v < x.age ? "#3fbf5f" : CK.mut]]; }],
+    ["spo2", "Pulse ox", function(x){ return [x.v + "%", [x.low ? "low " + x.low + "%" : "", CK.mut]]; }],
+    ["resp", "Breathing", function(x){ return [x.v, ["breaths a min", CK.mut]]; }]
+  ];
+  KINDS.fitins = { every:15 * MIN, draw:function(el, m){
+    var ppl = fitPeople(el, m); if(!ppl) return;
+    var rows = INS.filter(function(r){ return ppl.some(function(p){ return p.ins && p.ins[r[0]]; }); });
+    var b = title("RECOVERY AND FITNESS");
+    if(!rows.length){ el.innerHTML = calSvg(b + cT(480, 290, "No readings from the watches yet", {s:32, c:CK.mut, a:"middle"}), "Recovery and fitness"); return; }
+    var x0 = 250, cw = (950 - x0) / ppl.length, top = 112, rh = Math.min(96, (530 - top) / rows.length), today = isoDay(new Date());
+    var name = Math.min(36, cw * .16), ls = r1(Math.min(34, rh * .42)), vs = r1(Math.min(48, rh * .5, cw * .2)), ss = r1(Math.min(20, rh * .26, cw * .085));
+    ppl.forEach(function(p, i){ b += nameRow(x0 + cw * i + cw / 2, 92, p, name, cw - 10); });
+    rows.forEach(function(r, j){ var y = top + rh * j;
+      b += cL(20, y, 940, y, CK.grid, 2) + cT(24, y + rh / 2 + ls * .36, r[1], {s:ls, w:700});
+      ppl.forEach(function(p, i){ var x = p.ins && p.ins[r[0]], cx = x0 + cw * i + cw / 2; if(!x) return;
+        var f = r[2](x), sub = f[1][0], old = x.d && x.d !== today ? DAYS[parseDay(x.d).getDay()].slice(0, 3) : "", word = r[0] === "tstat";
+        if(old) sub = sub ? sub + " · " + old : "from " + old;
+        var vsz = word ? r1(vs * .72) : vs, vy = y + rh / 2 + (sub ? vsz * .1 : vsz * .36);
+        b += cT(cx, vy, fitT(String(f[0]), cw - 16, vsz, true), {s:vsz, w:700, c:word ? f[1][1] : CK.ink, a:"middle"});
+        if(sub) b += cT(cx, vy + ss + 6, fitT(sub, cw - 12, ss, false), {s:ss, w:!word && f[1][1] && f[1][1] !== CK.mut ? 700 : 400, c:word ? CK.mut : (f[1][1] || CK.mut), a:"middle"}); }); });
+    el.innerHTML = calSvg(fitDim(b, ppl), "Recovery and fitness");
   }};
 
   /* ================================================ Strava ==== */

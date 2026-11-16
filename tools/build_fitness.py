@@ -19,7 +19,10 @@ renewed them, plus what is kept between runs, locked with GARMIN_KEY).
 Garmin: each person keeps a history of up to 90 days. Every run fetches the
 last seven days again (today keeps changing, and a watch can sync late) and
 fills in up to BACKFILL older days not fetched yet. Today also gets its detail:
-body battery and stress through the day, and last night's sleep stages.
+body battery and stress through the day, and last night's sleep stages; and
+whatever the watch works out about recovery and fitness (HRV status, training
+readiness, VO2 max, fitness age, training status, pulse ox, breathing), each
+kept up to INS_DAYS so a missed night does not blank it.
 Garmin's own Health API is for businesses only, so this uses the unofficial
 garminconnect library; Garmin can change things and break it, and the board
 then says "Garmin not answering" rather than showing old numbers as new.
@@ -41,7 +44,9 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 DAYS = 7          # fetched again on every run
 HISTORY = 90      # days kept per person
 BACKFILL = 21     # older days filled in per run
-KEEP = ("d", "steps", "goal", "bb", "bbHigh", "sleep", "sleepH", "rhr", "imod", "ivig", "igoal", "stress")
+KEEP = ("d", "steps", "goal", "bb", "bbHigh", "sleep", "sleepH", "rhr", "imod", "ivig", "igoal", "stress",
+        "kcal", "kcalT", "dist", "bbUp", "bbDown")
+INS_DAYS = 7      # an insight older than this (say, HRV from a night the watch was off) is dropped
 STEP = 15         # minutes between points on today's curves
 STRAVA_API = "https://www.strava.com/api/v3"
 EFFORTS_PER_RUN = 25   # runs whose best efforts are fetched per job run (Strava allows 100 calls a quarter hour)
@@ -94,7 +99,11 @@ def fetch(g, dates, today_iso):
                         "bbHigh": s.get("bodyBatteryHighestValue"), "bbLow": s.get("bodyBatteryLowestValue"),
                         "rhr": s.get("restingHeartRate"), "imod": s.get("moderateIntensityMinutes"),
                         "ivig": s.get("vigorousIntensityMinutes"), "igoal": s.get("intensityMinutesGoal"),
-                        "stress": avg if isinstance(avg, (int, float)) and avg >= 0 else None})
+                        "stress": avg if isinstance(avg, (int, float)) and avg >= 0 else None,
+                        "kcal": round(s["activeKilocalories"]) if isinstance(s.get("activeKilocalories"), (int, float)) else None,
+                        "kcalT": round(s["totalKilocalories"]) if isinstance(s.get("totalKilocalories"), (int, float)) else None,
+                        "dist": round(s["totalDistanceMeters"]) if isinstance(s.get("totalDistanceMeters"), (int, float)) else None,
+                        "bbUp": s.get("bodyBatteryChargedValue"), "bbDown": s.get("bodyBatteryDrainedValue")})
         except Exception:
             pass
         try:
@@ -173,6 +182,100 @@ def detail(g, d, tz, sleep_raw):
     return {k: v for k, v in out.items() if v not in (None, [])}
 
 
+def num(v):
+    """A number from Garmin, which sometimes sends them as text; None for anything else."""
+    try:
+        v = float(v)
+        return v if v == v and v > 0 else None
+    except (TypeError, ValueError):
+        return None
+
+
+def insights(g, d):
+    """What the watch works out about recovery and fitness, where it does:
+    HRV status, training readiness, VO2 max, fitness age, training status,
+    pulse ox and breathing rate. Each is asked for on its own; a watch that
+    does not record one simply has no answer for it."""
+    out = {}
+    try:
+        h = (g.get_hrv_data(d) or {}).get("hrvSummary") or {}
+        if num(h.get("lastNightAvg")):
+            out["hrv"] = {"v": round(num(h["lastNightAvg"])), "st": str(h.get("status") or "").upper(),
+                          "wk": round(num(h["weeklyAvg"])) if num(h.get("weeklyAvg")) else None}
+    except Exception:
+        pass
+    try:
+        rd = g.get_training_readiness(d) or []
+        rd = [x for x in (rd if isinstance(rd, list) else [rd]) if isinstance(x, dict) and num(x.get("score"))]
+        if rd:
+            x = max(rd, key=lambda x: str(x.get("timestamp") or ""))
+            out["ready"] = {"v": round(num(x["score"])), "lvl": str(x.get("level") or "").upper()}
+    except Exception:
+        pass
+    try:
+        ts = g.get_training_status(d) or {}
+        v = pick(ts, "mostRecentVO2Max", "generic", "vo2MaxPreciseValue") or pick(ts, "mostRecentVO2Max", "generic", "vo2MaxValue")
+        if num(v):
+            out["vo2"] = {"v": round(num(v), 1)}
+        devs = pick(ts, "mostRecentTrainingStatus", "latestTrainingStatusData") or {}
+        devs = [x for x in devs.values() if isinstance(x, dict)] if isinstance(devs, dict) else []
+        devs.sort(key=lambda x: not x.get("primaryTrainingDevice"))
+        for x in devs:
+            word = str(x.get("trainingStatusFeedbackPhrase") or "").upper().rsplit("_", 1)[0]
+            if word and not word.startswith("NO_STATUS"):
+                out["tstat"] = {"st": word}
+                break
+    except Exception:
+        pass
+    if "vo2" not in out:
+        try:
+            mm = g.get_max_metrics(d) or []
+            for x in (mm if isinstance(mm, list) else [mm]):
+                v = pick(x, "generic", "vo2MaxPreciseValue") or pick(x, "generic", "vo2MaxValue")
+                if num(v):
+                    out["vo2"] = {"v": round(num(v), 1)}
+                    break
+        except Exception:
+            pass
+    try:
+        fa = g.get_fitnessage_data(d) or {}
+        if num(fa.get("fitnessAge")):
+            out["fage"] = {"v": round(num(fa["fitnessAge"])), "age": round(num(fa["chronologicalAge"])) if num(fa.get("chronologicalAge")) else None}
+    except Exception:
+        pass
+    try:
+        sp = g.get_spo2_data(d) or {}
+        v = num(sp.get("avgSleepSpO2")) or num(sp.get("averageSpO2"))
+        if v:
+            out["spo2"] = {"v": round(v), "low": round(num(sp["lowestSpO2"])) if num(sp.get("lowestSpO2")) else None}
+    except Exception:
+        pass
+    try:
+        rp = g.get_respiration_data(d) or {}
+        v = num(rp.get("avgSleepRespirationValue")) or num(rp.get("avgWakingRespirationValue"))
+        if v:
+            out["resp"] = {"v": round(v)}
+    except Exception:
+        pass
+    for x in out.values():
+        x["d"] = d
+        for k in [k for k, v in x.items() if v in (None, "")]:
+            del x[k]
+    return out
+
+
+def keep_insights(old, new, today):
+    """Today's insights, and the last one of each kind from the past week where today has none yet."""
+    first = (today - datetime.timedelta(days=INS_DAYS - 1)).isoformat()
+    out = {k: v for k, v in (old or {}).items() if isinstance(v, dict) and str(v.get("d", "")) >= first}
+    out.update(new)
+    return out
+
+
+INS_NAMES = (("hrv", "HRV"), ("ready", "readiness"), ("vo2", "VO2 max"), ("fage", "fitness age"),
+             ("tstat", "training status"), ("spo2", "pulse ox"), ("resp", "breathing"))
+
+
 def merge(old, new, today):
     """The history, newest first: new rows replace old ones for the same day."""
     first = (today - datetime.timedelta(days=HISTORY - 1)).isoformat()
@@ -201,22 +304,26 @@ def garmin(sent, kept, today, tz, out, renewed):
             rows, sleep_raw = fetch(g, recent + older, recent[0])
             hist = merge(hist, rows, today)
             person["today"] = dict(detail(g, recent[0], tz, sleep_raw), d=recent[0])
+            fresh = insights(g, recent[0])
+            person["ins"] = keep_insights(prev.get("ins"), fresh, today)
             entry["tokens"] = g.client.dumps()
             person["ok"], person["okAt"] = True, iso_utc()
             ok += 1
             t = person["today"]
             print("garmin %d: ok, %d days kept; today: %d battery points, %d stress points, %d sleep stages" %
                   (n, len(hist), len(t.get("bbc", [])), len(t.get("stc", [])), len(t.get("stages", []))))
+            print("garmin %d: watch has %s" % (n, ", ".join(nm for k, nm in INS_NAMES if k in fresh) or "none of the insights today"))
         except Exception as ex:
             print("garmin %d: FAILED (%s)" % (n, type(ex).__name__))
             hist = merge(hist, [], today)                    # the board dims these and says since when
             person["ok"], person["okAt"] = False, prev.get("okAt", "")
             if prev.get("today"):
                 person["today"] = prev["today"]
+            person["ins"] = keep_insights(prev.get("ins"), {}, today)
         person["hist"] = hist
         person["days"] = [r for r in hist if r["d"] in recent]
         entry.pop("days", None)
-        entry.update(hist=hist, okAt=person["okAt"], today=person.get("today"))
+        entry.update(hist=hist, okAt=person["okAt"], today=person.get("today"), ins=person.get("ins") or {})
         renewed["accounts"].append(entry)
         out["people"].append(person)
     return ok, len(sent.get("accounts", []))
