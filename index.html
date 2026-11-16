@@ -1824,10 +1824,10 @@ html.lightlook .mapwrap .credit{color:#3b4855; text-shadow:none}
         '</div><div class="row" style="justify-content:center;gap:5cqw;margin-top:2cqw"><span><span class="y" style="font-size:3.2cqw">Lo</span><br>' + T0(d.lo) + '</span><span><span class="y" style="font-size:3.2cqw">Hi</span><br>' + T0(d.hi) + '</span></div></div>'; }).join("") + '</div>']);
     if(days.length > 1 && days[0].rise){
       var t0 = new Date(days[0].rise), s0 = new Date(days[0].set), t1 = new Date(days[1].rise), s1 = new Date(days[1].set);
-      p.push(["Almanac", '<div style="display:grid;grid-template-columns:34% 33% 33%;row-gap:1cqw"><span></span><span class="y">' + DAYS[t0.getDay()] + '</span><span class="y">' + DAYS[t1.getDay()] + '</span><span>Sunrise:</span><span>' + hm(t0).toLowerCase() +
-        '</span><span>' + hm(t1).toLowerCase() + '</span><span>Sunset:</span><span>' + hm(s0).toLowerCase() + '</span><span>' + hm(s1).toLowerCase() + '</span></div><div class="y" style="margin-top:4cqw">Moon Data:</div>' +
-        '<div style="display:grid;grid-template-columns:repeat(4,1fr);text-align:center;font-size:3.8cqw">' + moonPhases().map(function(mp){ var i = ["New","First","Full","Last"].indexOf(mp[0]);
-          return '<div>' + mp[0] + '<div style="width:9cqw;height:9cqw;margin:1cqw auto;border-radius:50%;background:' + (i === 0 ? "#111" : i === 2 ? "#e8e8e8" : "linear-gradient(90deg," + (i === 1 ? "#111 50%,#e8e8e8 50%" : "#e8e8e8 50%,#111 50%") + ")") + ';box-shadow:0 0 0 .3cqw #c9c9c9"></div>' + MON[mp[1].getMonth()] + " " + mp[1].getDate() + '</div>'; }).join("") + '</div>']);
+      p.push(["Almanac", '<div style="display:grid;grid-template-columns:34% 33% 33%;row-gap:.6cqw"><span></span><span class="y">' + DAYS[t0.getDay()] + '</span><span class="y">' + DAYS[t1.getDay()] + '</span><span>Sunrise:</span><span>' + hm(t0).toLowerCase() +
+        '</span><span>' + hm(t1).toLowerCase() + '</span><span>Sunset:</span><span>' + hm(s0).toLowerCase() + '</span><span>' + hm(s1).toLowerCase() + '</span></div><div class="y" style="margin-top:2cqw">Moon Data:</div>' +
+        '<div style="display:grid;grid-template-columns:repeat(4,1fr);text-align:center;font-size:3.8cqw;line-height:1.15">' + moonPhases().map(function(mp){ var i = ["New","First","Full","Last"].indexOf(mp[0]);
+          return '<div>' + mp[0] + '<div style="width:6.5cqw;height:6.5cqw;margin:.8cqw auto;border-radius:50%;background:' + (i === 0 ? "#111" : i === 2 ? "#e8e8e8" : "linear-gradient(90deg," + (i === 1 ? "#111 50%,#e8e8e8 50%" : "#e8e8e8 50%,#111 50%") + ")") + ';box-shadow:0 0 0 .3cqw #c9c9c9"></div>' + MON[mp[1].getMonth()] + " " + mp[1].getDate() + '</div>'; }).join("") + '</div>']);
     }
     return p;
   }
@@ -1879,7 +1879,7 @@ html.lightlook .mapwrap .credit{color:#3b4855; text-shadow:none}
     if(now - last.alerts >= 5 * MIN){ last.alerts = now; loadAlerts(); }
     if(now - last.retro >= 30 * MIN){ last.retro = now; loadRetroData(); }
     if(now - last.slow >= 6 * HOUR){ last.slow = now; loadNormals(); loadSpread(); loadPollen(); }
-    if(now - last.fit >= 30 * MIN){ last.fit = now; loadFitness(); }
+    if(now - last.fit >= 15 * MIN){ last.fit = now; loadFitness(); }
     applyLook(); nightCover(); burnShift(); staleCheck(); retroCheck(); restartCheck();
   }
   function extrasNow(){ loadWxExtra(); loadNormals(); loadSpread(); loadAir(); loadPollen(); loadWindGrid(); loadAlerts(); loadRetroData();
@@ -2219,8 +2219,8 @@ html.lightlook .mapwrap .credit{color:#3b4855; text-shadow:none}
   /* ================================================ fitness ==== */
   /* Body battery, sleep, steps, stress, heart rate, activity minutes and more from the
      family's Garmin accounts, and workouts from Strava. The GitHub fitness job
-     fetches them every half hour and publishes them locked on the "fitness"
-     branch; the board reads that file every half hour. Sized to be read from
+     fetches them every 15 minutes and publishes them locked on the "fitness"
+     branch; the board reads that file every 15 minutes. Sized to be read from
      across the kitchen: big numbers, few words. */
   var FIT_KINDS = ["fitbattery","fitsleep","fitsteps","fitcompare","fitgoals","fitweeks","fitvs","fitbest","fitbbday","fitstress","fitrhr","fitstages","fitactive",
                    "fitcal","fitdist","fitbbcd","fitins",
