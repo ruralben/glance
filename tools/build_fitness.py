@@ -448,8 +448,11 @@ KINDS = {"Run": "Run", "TrailRun": "Run", "VirtualRun": "Run", "Ride": "Ride", "
 
 
 def strava(sent, kept, today, tz, out, renewed, full=True):
-    accounts = [x for x in sent.get("accounts") or [] if x.get("refresh")]
-    if not accounts or not sent.get("client_id") or not sent.get("client_secret"):
+    # Each person signs in through their own Strava app; an older STRAVA secret has one app for everyone.
+    accounts = [dict(x, client_id=x.get("client_id") or sent.get("client_id"), client_secret=x.get("client_secret") or sent.get("client_secret"))
+                for x in sent.get("accounts") or [] if x.get("refresh")]
+    accounts = [x for x in accounts if x["client_id"] and x["client_secret"]]
+    if not accounts:
         return 0, 0
     year0 = datetime.date(today.year, 1, 1)
     after = datetime.datetime.combine(min(year0, today - datetime.timedelta(days=14)), datetime.time(), tz).timestamp()
@@ -471,7 +474,7 @@ def strava(sent, kept, today, tz, out, renewed, full=True):
             renewed["strava"].append(entry)
             continue
         try:
-            tok = http_json("https://www.strava.com/oauth/token", {"client_id": sent["client_id"], "client_secret": sent["client_secret"],
+            tok = http_json("https://www.strava.com/oauth/token", {"client_id": x["client_id"], "client_secret": x["client_secret"],
                                                                      "grant_type": "refresh_token", "refresh_token": refresh})
             entry["refresh"] = tok["refresh_token"]
             access = tok["access_token"]
@@ -531,7 +534,7 @@ def strava(sent, kept, today, tz, out, renewed, full=True):
             print("strava %d: ok, %d activities, %d best efforts asked" % (n, len(acts), asked))
             ga = GARMIN_ACTS.get(first_name(x.get("name")))
             if ga is None:
-                print("strava %d: not compared with Garmin (%s)" % (n, "no name to pair by" if not first_name(x.get("name")) else "no Garmin account by that first name"))
+                print("strava %d: not compared with Garmin this run (%s)" % (n, "no name to pair by" if not first_name(x.get("name")) else "no Garmin list for that first name"))
             else:
                 c = compare(acts, ga)
                 out.setdefault("compare", {})[x.get("id")] = dict(c, name=x.get("name", ""), at=iso_utc())

@@ -1123,22 +1123,46 @@ html.lightlook .mapwrap .credit{color:#3b4855; text-shadow:none}
     var pick = parts.length > 1 ? parts[parts.length - 1] : (parts[0] || "");
     return pick.toUpperCase().slice(0, 16);
   }
+  /* The retro loop's observations: the cities picked on the Manager's Weather
+     tab, or else the larger regional centers within about 4 to 5 hours' drive
+     (290 miles as the crow flies) of home: the eight nearest with 90,000 people or more. */
+  var REGIONAL = [   /* name, lat, lon, metro population (for picking the larger ones) */
+    ["Minneapolis",44.98,-93.27,3700000],["Chicago",41.88,-87.63,9400000],["Kansas City",39.10,-94.58,2200000],["Milwaukee",43.04,-87.91,1570000],
+    ["Winnipeg",49.90,-97.14,830000],["Omaha",41.26,-95.94,970000],["Des Moines",41.59,-93.62,720000],["Madison",43.07,-89.40,680000],
+    ["Peoria",40.69,-89.59,400000],["Quad Cities",41.52,-90.58,380000],["Rockford",42.27,-89.09,340000],["Green Bay",44.51,-88.01,330000],
+    ["Sioux Falls",43.55,-96.73,300000],["Duluth",46.79,-92.10,290000],["Cedar Rapids",41.98,-91.67,275000],["Fargo",46.88,-96.79,260000],
+    ["Rochester",44.02,-92.47,230000],["Columbia, MO",38.95,-92.33,210000],["St. Cloud",45.56,-94.16,200000],["Iowa City",41.66,-91.53,175000],
+    ["Waterloo",42.49,-92.34,170000],["Eau Claire",44.81,-91.50,170000],["Sioux City",42.50,-96.40,150000],["Rapid City",44.08,-103.23,150000],
+    ["La Crosse",43.80,-91.24,140000],["Bismarck",46.81,-100.78,135000],["Thunder Bay",48.38,-89.25,120000],["Wausau",44.96,-89.63,125000],
+    ["Grand Forks",47.93,-97.03,105000],["Mankato",44.16,-94.00,100000],["Dubuque",42.50,-90.66,97000],["Brainerd",46.36,-94.20,95000],
+    ["Marquette",46.54,-87.40,67000],["Mason City",43.15,-93.20,50000],["Winona",44.05,-91.64,50000],["Bemidji",47.47,-94.88,46000],
+    ["Aberdeen",45.46,-98.49,43000],["Willmar",45.12,-95.04,43000],["Alexandria",45.89,-95.38,40000],["Brookings",44.31,-96.80,35000],
+    ["Watertown",44.90,-97.12,30000],["Hibbing",47.43,-92.94,30000],["Fergus Falls",46.28,-96.08,25000],["Marshall",44.45,-95.79,25000],
+    ["Worthington",43.62,-95.60,22000],["Albert Lea",43.65,-93.37,30000],["Detroit Lakes",46.82,-95.85,20000],["Thief River Falls",48.12,-96.18,20000],
+    ["International Falls",48.60,-93.41,10000],["Morris",45.59,-95.91,5000],["Grand Marais",47.75,-90.33,1400]];
+  function miles(a, b){ var r = Math.PI / 180, x = (b[1] - a[1]) * r * Math.cos((a[0] + b[0]) / 2 * r), y = (b[0] - a[0]) * r; return Math.sqrt(x * x + y * y) * 3959; }
+  function retroCities(){
+    var mine = ((CONFIG && CONFIG.weather && CONFIG.weather.cities) || []).filter(function(c){ return c && c.lat != null && c.lon != null; });
+    if(mine.length) return mine.slice(0, 16);
+    var h = home(); if(!h) return [];
+    return REGIONAL.map(function(c){ return {name:c[0], lat:c[1], lon:c[2], pop:c[3], mi:miles(h, [c[1], c[2]])}; })
+      .filter(function(c){ return c.mi > 25 && c.mi <= 290 && c.pop >= 90000; })
+      .sort(function(a, b){ return a.mi - b.mi; }).slice(0, 8);
+  }
   function loadRetroData(){
     if(!setting("retro", "on")) return;
     nwsPoint().then(function(pt){
-      var pr = pt.props;
-      getJSON(pr.forecast, true).then(function(f){ DATA.nwsText = f.properties.periods.slice(0, 3).map(function(p){ return {name:p.name, text:p.detailedForecast}; }); }).catch(function(){});
-      getJSON(pr.observationStations, true).then(function(s){
-        var list = (s.features || []).slice(0, 8);
-        return Promise.all(list.map(function(st){
-          return getJSON(st.id + "/observations/latest", true).then(function(o){ var p = o.properties;
-            return {name:stationName(st.properties.name),
-                    temp:p.temperature && p.temperature.value != null ? p.temperature.value * 9 / 5 + 32 : null, sky:String(p.textDescription || "").toUpperCase().slice(0, 12),
-                    dir:p.windDirection && p.windDirection.value != null ? COMPASS[Math.round(p.windDirection.value / 45) % 8] : "",
-                    wind:p.windSpeed && p.windSpeed.value != null ? p.windSpeed.value * 0.621371 : null}; }).catch(function(){ return null; });
-        }));
-      }).then(function(obs){ var seen = {};   /* one row per place */
-        DATA.nwsObs = (obs || []).filter(function(o){ if(!o || o.temp == null || seen[o.name]) return false; seen[o.name] = true; return true; }); }).catch(function(){});
+      getJSON(pt.props.forecast, true).then(function(f){ DATA.nwsText = f.properties.periods.slice(0, 3).map(function(p){ return {name:p.name, text:p.detailedForecast}; }); }).catch(function(){});
+    }).catch(function(){});
+    /* Every city's current weather in one request to Open-Meteo, the weather source already in use. */
+    var cs = retroCities(); if(!cs.length) return;
+    getJSON("https://api.open-meteo.com/v1/forecast?latitude=" + cs.map(function(c){ return (+c.lat).toFixed(2); }).join(",") +
+            "&longitude=" + cs.map(function(c){ return (+c.lon).toFixed(2); }).join(",") +
+            "&current=temperature_2m,weather_code,wind_speed_10m,wind_direction_10m&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto", true).then(function(r){
+      r = Array.isArray(r) ? r : [r];
+      DATA.nwsObs = cs.map(function(c, i){ var q = r[i] && r[i].current; if(!q || q.temperature_2m == null) return null;
+        return {name:c.name, temp:q.temperature_2m, sky:words(q.weather_code).toUpperCase().slice(0, 13),
+                dir:q.wind_direction_10m != null ? COMPASS[Math.round(q.wind_direction_10m / 45) % 8] : "", wind:q.wind_speed_10m}; }).filter(Boolean);
     }).catch(function(){});
   }
 
@@ -1816,8 +1840,11 @@ html.lightlook .mapwrap .credit{color:#3b4855; text-shadow:none}
         [["Humidity:", Math.round(now.rh) + "%"], ["Dewpoint:", T0(now.dew) + "°"], ["Visibility:", vis && vis.vis != null ? Math.round(vis.vis / 1609) + " Mi" : "–"],
          ["Pressure:", now.inhg ? now.inhg.toFixed(2) : "–"], [now.feels < now.temp ? "Wind Chill:" : "Feels Like:", T0(now.feels) + "°"]].map(function(r){ return '<div class="row"><span>' + r[0] + '</span><span>' + r[1] + '</span></div>'; }).join("") + '</div></div>']);
     }
-    if(DATA.nwsObs && DATA.nwsObs.length) p.push(["Latest<br>Observations", '<table><tr style="font-size:3.2cqw"><td></td><td style="text-align:right">°' + (setting("units", "temp") === "C" ? "C" : "F") + '</td><td style="padding-left:2cqw">WEATHER</td><td colspan="2" style="text-align:right">WIND</td></tr>' +
-      DATA.nwsObs.slice(0, 8).map(function(o){ return '<tr><td>' + esc(o.name) + '</td><td style="text-align:right">' + T0(o.temp) + '</td><td style="padding-left:2cqw">' + esc(o.sky) + '</td><td style="padding-left:2cqw">' + o.dir + '</td><td style="text-align:right">' + (o.wind == null ? "" : windU(o.wind)) + '</td></tr>'; }).join("") + '</table>']);
+    if(DATA.nwsObs && DATA.nwsObs.length){
+      var ob = DATA.nwsObs, pages = Math.ceil(ob.length / 8), per = Math.ceil(ob.length / pages);
+      for(var pi = 0; pi < pages; pi++) p.push(["Latest<br>Observations", '<table><tr style="font-size:3.2cqw"><td></td><td style="text-align:right">°' + (setting("units", "temp") === "C" ? "C" : "F") + '</td><td style="padding-left:2cqw">WEATHER</td><td colspan="2" style="text-align:right">WIND</td></tr>' +
+        ob.slice(pi * per, pi * per + per).map(function(o){ return '<tr><td style="white-space:nowrap">' + esc(o.name) + '</td><td style="text-align:right">' + T0(o.temp) + '</td><td style="padding-left:2cqw;white-space:nowrap">' + esc(o.sky) + '</td><td style="padding-left:2cqw">' + o.dir + '</td><td style="text-align:right">' + (o.wind == null ? "" : windU(o.wind)) + '</td></tr>'; }).join("") + '</table>']);
+    }
     if(DATA.nwsText && DATA.nwsText.length) p.push(["Local<br>Forecast", '<div style="text-transform:uppercase;line-height:1.4;font-size:3.6cqw">' + DATA.nwsText.slice(0, 2).map(function(t){ return esc(t.name) + "... " + esc(t.text); }).join("<br><br>") + '</div>']);
     if(days.length > 3) p.push(["Extended<br>Forecast", '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:3cqw;text-align:center;height:100%">' + days.slice(1, 4).map(function(d){
       return '<div><div class="y">' + DAYS[parseDay(d.date).getDay()].slice(0, 3).toUpperCase() + '</div><div style="width:62%;margin:1cqw auto">' + icon(d.code) + '</div><div style="font-size:3.6cqw;line-height:1.1;min-height:8cqw">' + esc(words(d.code)) +
@@ -3337,7 +3364,7 @@ html.lightlook .mapwrap .credit{color:#3b4855; text-shadow:none}
     build();
     note("layout", CONFIG.screens.length || PREVIEW ? "" : hash.k ? "No layout has been published yet."
                                                                : "This display needs its full address: the key is missing from it.");
-    if(wasSource !== undefined && JSON.stringify(CONFIG.weather || {}) !== wasSource){ DATA.wx = null; drawKind("weather", "forecast"); loadWeather(); }
+    if(wasSource !== undefined && JSON.stringify(CONFIG.weather || {}) !== wasSource){ DATA.wx = null; drawKind("weather", "forecast"); loadWeather(); loadRetroData(); }
     if(wasFeed !== undefined && (CONFIG.nextUpFeed || "") !== wasFeed){ DATA.chores = null; drawKind("nextup"); loadChores(); }   /* the chores moved */
     loadSports();
     if(!DATA.sensors) loadSensors();
