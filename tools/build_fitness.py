@@ -298,6 +298,46 @@ def due(prev, sent_at):
         return True
 
 
+# ------------------------------------------- Strava against Garmin ----
+# For someone on both (paired by first name), a full run lists their Garmin
+# activities for the same span Strava covers and matches the two by start time.
+# The log gets counts only; which activities are on one side only goes into the
+# locked file, where the Manager's copy can read it.
+GARMIN_ACTS = {}
+
+
+def first_name(x):
+    return str(x or "").strip().lower().split(" ")[0]
+
+
+def garmin_activities(g, start, end):
+    out = []
+    for a in g.get_activities_by_date(start.isoformat(), end.isoformat()) or []:
+        t = str(a.get("startTimeLocal") or "")[:19]
+        if t:
+            out.append({"t": t.replace(" ", "T"), "k": pick(a, "activityType", "typeKey") or "", "m": round(a.get("distance") or 0)})
+    return out
+
+
+def compare(strava_acts, garmin_acts):
+    """Match by start time, within three minutes, each activity used once."""
+    def at(t):
+        return datetime.datetime.fromisoformat(str(t)[:19])
+    left = [dict(a, at=at(a["t"])) for a in garmin_acts]
+    both, only_s = 0, []
+    for q in strava_acts:
+        t = at(q.get("start_date_local") or "")
+        hit = min(left, key=lambda a: abs((a["at"] - t).total_seconds()), default=None)
+        if hit is not None and abs((hit["at"] - t).total_seconds()) <= 180:
+            both += 1
+            left.remove(hit)
+        else:
+            only_s.append({"t": str(q.get("start_date_local"))[:16], "k": q.get("sport_type") or q.get("type") or "",
+                           "m": round(q.get("distance") or 0), "manual": bool(q.get("manual"))})
+    only_g = [{"t": a["t"][:16], "k": a["k"], "m": a["m"]} for a in left]
+    return {"both": both, "onlyStrava": only_s, "onlyGarmin": only_g}
+
+
 def merge(old, new, today):
     """The history, newest first: new rows replace old ones for the same day."""
     first = (today - datetime.timedelta(days=HISTORY - 1)).isoformat()
@@ -306,7 +346,7 @@ def merge(old, new, today):
     return [by[d] for d in sorted(by, reverse=True) if d >= first]
 
 
-def garmin(sent, kept, today, tz, out, renewed):
+def garmin(sent, kept, today, tz, out, renewed, on_strava=()):
     from garminconnect import Garmin
     ok = 0
     for n, x in enumerate(sent.get("accounts", []), 1):
@@ -329,6 +369,12 @@ def garmin(sent, kept, today, tz, out, renewed):
             hist = merge(hist, rows, today)
             person["today"] = dict(detail(g, recent[0], tz, sleep_raw), d=recent[0])
             fresh = insights(g, recent[0]) if full else {}
+            if full and first_name(x.get("name")) in on_strava:
+                try:
+                    since = min(datetime.date(today.year, 1, 1), today - datetime.timedelta(days=14))
+                    GARMIN_ACTS[first_name(x.get("name"))] = garmin_activities(g, since, today)
+                except Exception:
+                    pass
             person["ins"] = keep_insights(prev.get("ins"), fresh, today)
             entry["tokens"] = g.client.dumps()
             person["ok"], person["okAt"] = True, iso_utc()
@@ -483,6 +529,14 @@ def strava(sent, kept, today, tz, out, renewed, full=True):
             entry["last"] = {k: person.get(k) for k in ("recent", "year", "latest", "routes", "records")}
             ok += 1
             print("strava %d: ok, %d activities, %d best efforts asked" % (n, len(acts), asked))
+            ga = GARMIN_ACTS.get(first_name(x.get("name")))
+            if ga is None:
+                print("strava %d: not compared with Garmin (%s)" % (n, "no name to pair by" if not first_name(x.get("name")) else "no Garmin account by that first name"))
+            else:
+                c = compare(acts, ga)
+                out.setdefault("compare", {})[x.get("id")] = dict(c, name=x.get("name", ""), at=iso_utc())
+                print("strava %d vs garmin: in both %d; only in Strava %d (%d typed in); only in Garmin %d" %
+                      (n, c["both"], len(c["onlyStrava"]), sum(1 for a in c["onlyStrava"] if a["manual"]), len(c["onlyGarmin"])))
         except Exception as ex:
             print("strava %d: FAILED (%s)" % (n, type(ex).__name__))
             person.update(prev.get("last") or {})
@@ -529,7 +583,8 @@ def main():
     renewed = {"accounts": []}
     ok_g, n_g = (0, 0)
     if sent.get("accounts"):
-        ok_g, n_g = garmin(sent, {x.get("id"): x for x in old.get("accounts", []) if isinstance(x, dict)}, today, tz, out, renewed)
+        on_strava = {first_name(x.get("name")) for x in sent_strava.get("accounts") or [] if x.get("refresh") and first_name(x.get("name"))}
+        ok_g, n_g = garmin(sent, {x.get("id"): x for x in old.get("accounts", []) if isinstance(x, dict)}, today, tz, out, renewed, on_strava)
     # Strava follows Garmin's hourly rhythm: refreshed when the run is full for anyone, or when there is no Garmin at all.
     full = not sent.get("accounts") or any(due(x, x.get("signedAt")) for x in old.get("accounts", []) if isinstance(x, dict)) or not old.get("accounts")
     ok_s, n_s = strava(sent_strava, {x.get("id"): x for x in old.get("strava", []) if isinstance(x, dict)}, today, tz, out, renewed, full)
