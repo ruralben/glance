@@ -16,9 +16,14 @@ and writes two files for the "fitness" branch: fitness.enc (the numbers,
 locked with the display key) and tokens.enc (the tokens as Garmin and Strava
 renewed them, plus what is kept between runs, locked with GARMIN_KEY).
 
-Garmin: each person keeps a history of up to 90 days. Every run fetches the
-last seven days again (today keeps changing, and a watch can sync late) and
-fills in up to BACKFILL older days not fetched yet. Today also gets its detail:
+The job runs every 15 minutes. Most runs are light: today's numbers and
+curves only, a handful of requests a person. About once an hour (FULL_EVERY)
+a run is full: it also fetches the last seven days again (a watch can sync
+late), fills in older days, asks for the recovery readings and refreshes Strava.
+Garmin's way in is unofficial, and asking too often can get it blocked.
+
+Garmin: each person keeps a history of up to 90 days. A full run fetches the
+last seven days again and fills in up to BACKFILL older days not fetched yet. Today also gets its detail:
 body battery and stress through the day, and last night's sleep stages; and
 whatever the watch works out about recovery and fitness (HRV status, training
 readiness, VO2 max, fitness age, training status, pulse ox, breathing), each
@@ -47,6 +52,8 @@ BACKFILL = 21     # older days filled in per run
 KEEP = ("d", "steps", "goal", "bb", "bbHigh", "sleep", "sleepH", "rhr", "imod", "ivig", "igoal", "stress",
         "kcal", "kcalT", "dist", "bbUp", "bbDown")
 INS_DAYS = 7      # an insight older than this (say, HRV from a night the watch was off) is dropped
+INS_KEEP = {"vo2": 60, "fage": 60}   # these change slowly and are measured seldom (VO2 max needs an outdoor walk or run)
+FULL_EVERY = 50   # minutes between full runs
 STEP = 15         # minutes between points on today's curves
 STRAVA_API = "https://www.strava.com/api/v3"
 EFFORTS_PER_RUN = 25   # runs whose best efforts are fetched per job run (Strava allows 100 calls a quarter hour)
@@ -265,15 +272,30 @@ def insights(g, d):
 
 
 def keep_insights(old, new, today):
-    """Today's insights, and the last one of each kind from the past week where today has none yet."""
-    first = (today - datetime.timedelta(days=INS_DAYS - 1)).isoformat()
-    out = {k: v for k, v in (old or {}).items() if isinstance(v, dict) and str(v.get("d", "")) >= first}
+    """Today's insights, and the last one of each kind from the past week (two months for
+    VO2 max and fitness age) where today has none yet."""
+    def first(k):
+        return (today - datetime.timedelta(days=INS_KEEP.get(k, INS_DAYS) - 1)).isoformat()
+    out = {k: v for k, v in (old or {}).items() if isinstance(v, dict) and str(v.get("d", "")) >= first(k)}
     out.update(new)
     return out
 
 
 INS_NAMES = (("hrv", "HRV"), ("ready", "readiness"), ("vo2", "VO2 max"), ("fage", "fitness age"),
              ("tstat", "training status"), ("spo2", "pulse ox"), ("resp", "breathing"))
+
+
+def due(prev, sent_at):
+    """Whether this run should be a full one for someone: an hour since the last
+    full run, a fresh sign-in from the Manager, nothing kept yet, or a last run
+    that failed (so the next one catches up on whatever it missed)."""
+    if prev.get("failed") or prev.get("signedAt") != sent_at or not prev.get("fullAt") or not (prev.get("hist") or prev.get("days")):
+        return True
+    try:
+        last = datetime.datetime.fromisoformat(str(prev["fullAt"]).replace("Z", "+00:00"))
+        return (datetime.datetime.now(datetime.timezone.utc) - last).total_seconds() >= FULL_EVERY * 60
+    except ValueError:
+        return True
 
 
 def merge(old, new, today):
@@ -298,23 +320,29 @@ def garmin(sent, kept, today, tz, out, renewed):
         have = {r.get("d") for r in hist if isinstance(r, dict)}
         recent = [(today - datetime.timedelta(days=k)).isoformat() for k in range(DAYS)]
         older = [d for d in [(today - datetime.timedelta(days=k)).isoformat() for k in range(DAYS, HISTORY)] if d not in have][:BACKFILL]
+        full = due(prev, x.get("signedAt"))
+        entry["fullAt"] = prev.get("fullAt", "") if prev.get("signedAt") == x.get("signedAt") else ""
         try:
             g = Garmin()
             g.login(token)
-            rows, sleep_raw = fetch(g, recent + older, recent[0])
+            rows, sleep_raw = fetch(g, recent + older if full else recent[:1], recent[0])
             hist = merge(hist, rows, today)
             person["today"] = dict(detail(g, recent[0], tz, sleep_raw), d=recent[0])
-            fresh = insights(g, recent[0])
+            fresh = insights(g, recent[0]) if full else {}
             person["ins"] = keep_insights(prev.get("ins"), fresh, today)
             entry["tokens"] = g.client.dumps()
             person["ok"], person["okAt"] = True, iso_utc()
+            if full:
+                entry["fullAt"] = person["okAt"]
             ok += 1
             t = person["today"]
-            print("garmin %d: ok, %d days kept; today: %d battery points, %d stress points, %d sleep stages" %
-                  (n, len(hist), len(t.get("bbc", [])), len(t.get("stc", [])), len(t.get("stages", []))))
-            print("garmin %d: watch has %s" % (n, ", ".join(nm for k, nm in INS_NAMES if k in fresh) or "none of the insights today"))
+            print("garmin %d: ok (%s), %d days kept; today: %d battery points, %d stress points, %d sleep stages" %
+                  (n, "full" if full else "today only", len(hist), len(t.get("bbc", [])), len(t.get("stc", [])), len(t.get("stages", []))))
+            if full:
+                print("garmin %d: watch has %s" % (n, ", ".join(nm for k, nm in INS_NAMES if k in fresh) or "none of the insights today"))
         except Exception as ex:
             print("garmin %d: FAILED (%s)" % (n, type(ex).__name__))
+            entry["failed"] = True                           # the next run is a full one
             hist = merge(hist, [], today)                    # the board dims these and says since when
             person["ok"], person["okAt"] = False, prev.get("okAt", "")
             if prev.get("today"):
@@ -324,6 +352,8 @@ def garmin(sent, kept, today, tz, out, renewed):
         person["days"] = [r for r in hist if r["d"] in recent]
         entry.pop("days", None)
         entry.update(hist=hist, okAt=person["okAt"], today=person.get("today"), ins=person.get("ins") or {})
+        if not entry.get("fullAt"):
+            entry.pop("fullAt", None)
         renewed["accounts"].append(entry)
         out["people"].append(person)
     return ok, len(sent.get("accounts", []))
@@ -371,7 +401,7 @@ KINDS = {"Run": "Run", "TrailRun": "Run", "VirtualRun": "Run", "Ride": "Ride", "
          "VirtualRide": "Ride", "EBikeRide": "Ride", "Walk": "Walk", "Hike": "Hike", "Swim": "Swim"}
 
 
-def strava(sent, kept, today, tz, out, renewed):
+def strava(sent, kept, today, tz, out, renewed, full=True):
     accounts = [x for x in sent.get("accounts") or [] if x.get("refresh")]
     if not accounts or not sent.get("client_id") or not sent.get("client_secret"):
         return 0, 0
@@ -385,6 +415,15 @@ def strava(sent, kept, today, tz, out, renewed):
         refresh = prev["refresh"] if prev.get("signedAt") == x.get("signedAt") and prev.get("refresh") else x.get("refresh")
         person = {"id": x.get("id"), "name": x.get("name", ""), "color": x.get("color", "#ff7a3d"), "goal": x.get("goal")}
         entry = {"id": x.get("id"), "signedAt": x.get("signedAt"), "refresh": refresh, "efforts": prev.get("efforts") or {}, "okAt": prev.get("okAt", "")}
+        if not full and prev.get("signedAt") == x.get("signedAt") and prev.get("last") and prev.get("okAt"):
+            person.update(prev["last"])
+            person["ok"], person["okAt"] = True, prev["okAt"]
+            entry["last"] = prev["last"]
+            ok += 1
+            print("strava %d: ok, kept from the last full run" % n)
+            out["strava"]["people"].append(person)
+            renewed["strava"].append(entry)
+            continue
         try:
             tok = http_json("https://www.strava.com/oauth/token", {"client_id": sent["client_id"], "client_secret": sent["client_secret"],
                                                                      "grant_type": "refresh_token", "refresh_token": refresh})
@@ -491,7 +530,9 @@ def main():
     ok_g, n_g = (0, 0)
     if sent.get("accounts"):
         ok_g, n_g = garmin(sent, {x.get("id"): x for x in old.get("accounts", []) if isinstance(x, dict)}, today, tz, out, renewed)
-    ok_s, n_s = strava(sent_strava, {x.get("id"): x for x in old.get("strava", []) if isinstance(x, dict)}, today, tz, out, renewed)
+    # Strava follows Garmin's hourly rhythm: refreshed when the run is full for anyone, or when there is no Garmin at all.
+    full = not sent.get("accounts") or any(due(x, x.get("signedAt")) for x in old.get("accounts", []) if isinstance(x, dict)) or not old.get("accounts")
+    ok_s, n_s = strava(sent_strava, {x.get("id"): x for x in old.get("strava", []) if isinstance(x, dict)}, today, tz, out, renewed, full)
 
     open(a.out, "w", encoding="ascii").write(lock(out, board) + "\n")
     open(a.tokens_out, "w", encoding="ascii").write(lock(renewed, gkey) + "\n")

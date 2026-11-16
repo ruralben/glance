@@ -8,7 +8,8 @@ name: Fitness
 
 on:
   schedule:
-    - cron: "12,42 * * * *"    # every half hour; GitHub often runs these late
+    - cron: "3,18,33,48 * * * *"   # every 15 minutes; GitHub often runs these late or skips some,
+                                   # so the Manager also starts the job when one is overdue
   workflow_dispatch:
 
 permissions:
