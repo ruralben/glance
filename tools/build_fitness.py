@@ -543,6 +543,11 @@ def garmin(sent, kept, today, tz, out, renewed, on_strava=()):
                     GARMIN_ACTS[first_name(x.get("name"))] = [{"t": a["t"], "k": a.get("k", ""), "m": round(a.get("m") or 0)}
                                                               for a in entry["gacts"] if a.get("t", "") >= since]
             person["ins"] = keep_insights(prev.get("ins"), fresh, today)
+            # Today's curves, last night's sleep stages and the watch readings also go
+            # in the hand-over, which GitHub keeps 90 days: the copy on the PC gets
+            # every day's even when the PC was off all that day.
+            day = DELTA["garmin"].setdefault(x.get("id"), {"name": x.get("name", ""), "color": x.get("color"), "acts": {}})
+            day["today"], day["ins"] = person["today"], person["ins"]
             entry["tokens"] = g.client.dumps()
             person["ok"], person["okAt"] = True, iso_utc()
             if full:
@@ -870,12 +875,12 @@ def main():
 
     open(a.out, "w", encoding="ascii").write(lock(out, board) + "\n")
     open(a.tokens_out, "w", encoding="ascii").write(lock(renewed, gkey) + "\n")
-    n_delta = sum(len(p["acts"]) + ("profile" in p) + ("segments" in p) for side in DELTA.values() for p in side.values())
+    n_delta = sum(len(p["acts"]) + ("profile" in p) + ("segments" in p) + ("today" in p) for side in DELTA.values() for p in side.values())
     if a.explore_out and n_delta:
         delta = {"at": out["at"], "garmin": [dict(p, id=i, acts=list(p["acts"].values())) for i, p in DELTA["garmin"].items()],
                  "strava": [dict(p, id=i, acts=list(p["acts"].values())) for i, p in DELTA["strava"].items()]}
         open(a.explore_out, "w", encoding="ascii").write(lock(delta, gkey) + "\n")
-        print("explorer: %d activities handed over this run" % n_delta)
+        print("explorer: %d items handed over this run (activities, profiles, and each person's day)" % n_delta)
     print("garmin: %d of %d accounts fetched; strava: %d of %d" % (ok_g, n_g, ok_s, n_s))
     if n_g + n_s and not ok_g + ok_s:
         sys.exit(1)
