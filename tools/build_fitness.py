@@ -305,6 +305,63 @@ def due(prev, sent_at):
 # locked file, where the Manager's copy can read it.
 GARMIN_ACTS = {}
 
+# ------------------------------------------------ the explorer's history ----
+# For the Fitness Explorer: every Garmin and Strava activity each person has,
+# with its route, kept between runs and published locked (with GARMIN_KEY, not
+# the display key: the TV never needs it) as explore.enc. Fetched on full runs:
+# the whole history the first time, the last 30 days after that, and up to
+# ROUTES_PER_RUN Garmin routes a run (one request each) until all are in.
+ROUTES_PER_RUN = 15
+
+
+def garmin_act_row(a):
+    t = str(a.get("startTimeLocal") or "")[:19].replace(" ", "T")
+    r = {"id": a.get("activityId"), "t": t, "k": pick(a, "activityType", "typeKey") or "", "n": str(a.get("activityName") or "")[:60],
+         "m": a.get("distance"), "s": a.get("duration"), "mv": a.get("movingDuration"), "e": a.get("elevationGain"),
+         "hr": a.get("averageHR"), "hrx": a.get("maxHR"), "cal": a.get("calories"), "st": a.get("steps"),
+         "sp": a.get("averageSpeed"), "spx": a.get("maxSpeed"), "te": a.get("aerobicTrainingEffect"), "tea": a.get("anaerobicTrainingEffect"),
+         "v": a.get("vO2MaxValue"), "lat": a.get("startLatitude"), "lon": a.get("startLongitude"), "poly": bool(a.get("hasPolyline")),
+         "loc": a.get("locationName")}
+    return {k: (round(v, 2) if isinstance(v, float) else v) for k, v in r.items() if v not in (None, "")}
+
+
+def garmin_history(g, prev_acts, today):
+    """Every activity, kept by id; the route of up to ROUTES_PER_RUN more of them."""
+    cache = {str(a["id"]): a for a in prev_acts or [] if isinstance(a, dict) and a.get("id") is not None}
+    since = "2000-01-01" if not cache else (today - datetime.timedelta(days=30)).isoformat()
+    for a in g.get_activities_by_date(since, today.isoformat()) or []:
+        r = garmin_act_row(a)
+        if r.get("id") is None:
+            continue
+        old = cache.get(str(r["id"])) or {}
+        if "pts" in old:
+            r["pts"] = old["pts"]
+        cache[str(r["id"])] = r
+    asked = 0
+    for r in sorted(cache.values(), key=lambda q: q.get("t", ""), reverse=True):
+        if asked >= ROUTES_PER_RUN:
+            break
+        if r.get("poly") and "pts" not in r:
+            asked += 1
+            try:
+                det = g.get_activity_details(str(r["id"]), maxchart=10, maxpoly=1000) or {}
+                pts = [[round(q["lat"], 5), round(q["lon"], 5)] for q in pick(det, "geoPolylineDTO", "polyline") or []
+                       if isinstance(q, dict) and isinstance(q.get("lat"), (int, float)) and isinstance(q.get("lon"), (int, float))]
+                r["pts"] = sample(pts, 150)
+            except Exception:
+                pass                                          # tried again next run
+    return sorted(cache.values(), key=lambda q: q.get("t", "")), asked
+
+
+def strava_act_row(q):
+    r = {"id": q.get("id"), "t": str(q.get("start_date_local") or "")[:19], "k": q.get("sport_type") or q.get("type") or "", "n": str(q.get("name") or "")[:60],
+         "m": q.get("distance"), "s": q.get("moving_time"), "el": q.get("elapsed_time"), "e": q.get("total_elevation_gain"),
+         "sp": q.get("average_speed"), "spx": q.get("max_speed"), "hr": q.get("average_heartrate"), "hrx": q.get("max_heartrate"),
+         "cad": q.get("average_cadence"), "w": q.get("average_watts"), "kj": q.get("kilojoules"), "ku": q.get("kudos_count"),
+         "ach": q.get("achievement_count"), "pr": q.get("pr_count"), "tr": q.get("trainer") or None, "co": q.get("commute") or None,
+         "man": q.get("manual") or None, "poly": pick(q, "map", "summary_polyline") or None}
+    return {k: (round(v, 2) if isinstance(v, float) else v) for k, v in r.items() if v not in (None, "")}
+
 
 def first_name(x):
     return str(x or "").strip().lower().split(" ")[0]
@@ -355,7 +412,7 @@ def garmin(sent, kept, today, tz, out, renewed, on_strava=()):
         prev = kept.get(x.get("id")) or {}
         token = prev["tokens"] if prev.get("signedAt") == x.get("signedAt") and prev.get("tokens") else x.get("tokens")
         person = {"id": x.get("id"), "name": x.get("name", ""), "color": x.get("color", "#4da3ff"), "days": [], "hist": []}
-        entry = dict(x, tokens=token)
+        entry = dict(x, tokens=token, gacts=prev.get("gacts") or [])
         hist = prev.get("hist") or prev.get("days") or []
         have = {r.get("d") for r in hist if isinstance(r, dict)}
         recent = [(today - datetime.timedelta(days=k)).isoformat() for k in range(DAYS)]
@@ -369,12 +426,17 @@ def garmin(sent, kept, today, tz, out, renewed, on_strava=()):
             hist = merge(hist, rows, today)
             person["today"] = dict(detail(g, recent[0], tz, sleep_raw), d=recent[0])
             fresh = insights(g, recent[0]) if full else {}
-            if full and first_name(x.get("name")) in on_strava:
+            if full:
                 try:
-                    since = min(datetime.date(today.year, 1, 1), today - datetime.timedelta(days=14))
-                    GARMIN_ACTS[first_name(x.get("name"))] = garmin_activities(g, since, today)
-                except Exception:
-                    pass
+                    entry["gacts"], routes = garmin_history(g, entry["gacts"], today)
+                    print("garmin %d: %d activities kept, %d with routes (%d asked this run)" %
+                          (n, len(entry["gacts"]), sum(1 for a in entry["gacts"] if a.get("pts")), routes))
+                except Exception as ex:
+                    print("garmin %d: activity history not fetched (%s)" % (n, type(ex).__name__))
+                if first_name(x.get("name")) in on_strava:
+                    since = min(datetime.date(today.year, 1, 1), today - datetime.timedelta(days=14)).isoformat()
+                    GARMIN_ACTS[first_name(x.get("name"))] = [{"t": a["t"], "k": a.get("k", ""), "m": round(a.get("m") or 0)}
+                                                              for a in entry["gacts"] if a.get("t", "") >= since]
             person["ins"] = keep_insights(prev.get("ins"), fresh, today)
             entry["tokens"] = g.client.dumps()
             person["ok"], person["okAt"] = True, iso_utc()
@@ -463,7 +525,8 @@ def strava(sent, kept, today, tz, out, renewed, full=True):
         prev = kept.get(x.get("id")) or {}
         refresh = prev["refresh"] if prev.get("signedAt") == x.get("signedAt") and prev.get("refresh") else x.get("refresh")
         person = {"id": x.get("id"), "name": x.get("name", ""), "color": x.get("color", "#ff7a3d"), "goal": x.get("goal")}
-        entry = {"id": x.get("id"), "signedAt": x.get("signedAt"), "refresh": refresh, "efforts": prev.get("efforts") or {}, "okAt": prev.get("okAt", "")}
+        entry = {"id": x.get("id"), "signedAt": x.get("signedAt"), "refresh": refresh, "efforts": prev.get("efforts") or {}, "okAt": prev.get("okAt", ""),
+                 "sacts": prev.get("sacts") or []}
         if not full and prev.get("signedAt") == x.get("signedAt") and prev.get("last") and prev.get("okAt"):
             person.update(prev["last"])
             person["ok"], person["okAt"] = True, prev["okAt"]
@@ -485,6 +548,21 @@ def strava(sent, kept, today, tz, out, renewed, full=True):
                 if len(got) < 200:
                     break
             acts.sort(key=lambda q: q.get("start_date") or "")
+            # The explorer's history: every activity ever, the first time; this run's after that.
+            cache = {str(a["id"]): a for a in entry["sacts"] if isinstance(a, dict) and a.get("id") is not None}
+            older = []
+            if not cache:
+                for page in range(1, 11):
+                    got = http_json("%s/athlete/activities?before=%d&per_page=200&page=%d" % (STRAVA_API, int(after), page), token=access)
+                    older += got
+                    if len(got) < 200:
+                        break
+            for q in older + acts:
+                r = strava_act_row(q)
+                if r.get("id") is not None:
+                    cache[str(r["id"])] = r
+            entry["sacts"] = sorted(cache.values(), key=lambda q: q.get("t", ""))
+            print("strava %d: %d activities kept for the explorer" % (n, len(entry["sacts"])))
             # Fastest mile and 5K: from each run's best efforts, fetched once.
             eff, asked = entry["efforts"], 0
             for q in reversed(acts):
@@ -555,6 +633,7 @@ def main():
     ap.add_argument("--old-tokens", default="")
     ap.add_argument("--out", required=True)
     ap.add_argument("--tokens-out", required=True)
+    ap.add_argument("--explore-out", default="")
     a = ap.parse_args()
 
     board = key_bytes(os.environ.get("BOARD_KEY"), "BOARD_KEY")
@@ -594,6 +673,13 @@ def main():
 
     open(a.out, "w", encoding="ascii").write(lock(out, board) + "\n")
     open(a.tokens_out, "w", encoding="ascii").write(lock(renewed, gkey) + "\n")
+    if a.explore_out:
+        sv_names = {p.get("id"): p for p in (out.get("strava") or {}).get("people") or []}
+        explore = {"at": out["at"],
+                   "garmin": [{"id": e.get("id"), "name": e.get("name", ""), "color": e.get("color"), "acts": e.get("gacts") or []} for e in renewed["accounts"]],
+                   "strava": [{"id": e.get("id"), "name": (sv_names.get(e.get("id")) or {}).get("name", ""), "color": (sv_names.get(e.get("id")) or {}).get("color"),
+                               "acts": e.get("sacts") or []} for e in renewed.get("strava") or []]}
+        open(a.explore_out, "w", encoding="ascii").write(lock(explore, gkey) + "\n")
     print("garmin: %d of %d accounts fetched; strava: %d of %d" % (ok_g, n_g, ok_s, n_s))
     if n_g + n_s and not ok_g + ok_s:
         sys.exit(1)

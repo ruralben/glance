@@ -1,8 +1,9 @@
 # Refreshes the fitness numbers for Glance Digital Wall Calendar.
 # Signs in to Garmin and Strava with each person's saved token, fetches the
-# numbers (see tools/build_fitness.py), and publishes two locked files as the
-# single commit on the "fitness" branch: the numbers (for the board) and the
-# renewed tokens (for the next run). Nothing readable is published: this
+# numbers (see tools/build_fitness.py), and publishes three locked files as the
+# single commit on the "fitness" branch: the numbers (for the board), the
+# renewed tokens (for the next run), and every activity with its route (for the
+# Fitness Explorer). Nothing readable is published: this
 # repository is public, and so is this job's log.
 name: Fitness
 
@@ -51,7 +52,7 @@ jobs:
             echo "fitness is not set up for this board"
             exit 0
           fi
-          python tools/build_fitness.py --old-tokens ../old-tokens.enc --out ../fitness.enc --tokens-out ../tokens.enc
+          python tools/build_fitness.py --old-tokens ../old-tokens.enc --out ../fitness.enc --tokens-out ../tokens.enc --explore-out ../explore.enc
 
       # The fitness branch is always exactly one commit holding two files. It
       # is replaced, not added to, so the repository does not grow.
@@ -68,6 +69,7 @@ jobs:
           cp ../fitness.enc fitness.enc
           cp ../tokens.enc tokens.enc
           git add fitness.enc tokens.enc
+          if [ -f ../explore.enc ]; then cp ../explore.enc explore.enc; git add explore.enc; fi
           git -c user.name="glance" -c user.email="glance@users.noreply.github.com" \
               commit --quiet -m "Fitness data"
           git push --quiet --force origin fresh:fitness
