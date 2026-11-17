@@ -288,8 +288,9 @@ INS_NAMES = (("hrv", "HRV"), ("ready", "readiness"), ("vo2", "VO2 max"), ("fage"
 def due(prev, sent_at):
     """Whether this run should be a full one for someone: an hour since the last
     full run, a fresh sign-in from the Manager, nothing kept yet, or a last run
-    that failed (so the next one catches up on whatever it missed)."""
-    if prev.get("failed") or prev.get("signedAt") != sent_at or not prev.get("fullAt") or not (prev.get("hist") or prev.get("days")):
+    that failed (so the next one catches up on whatever it missed), or the
+    explorer's activity history not fetched yet."""
+    if prev.get("failed") or not prev.get("gactsAt") or prev.get("signedAt") != sent_at or not prev.get("fullAt") or not (prev.get("hist") or prev.get("days")):
         return True
     try:
         last = datetime.datetime.fromisoformat(str(prev["fullAt"]).replace("Z", "+00:00"))
@@ -325,6 +326,24 @@ def garmin_act_row(a):
     return {k: (round(v, 2) if isinstance(v, float) else v) for k, v in r.items() if v not in (None, "")}
 
 
+def garmin_routes(g, acts):
+    """The route of up to ROUTES_PER_RUN activities that have one and do not have it here yet, newest first."""
+    asked = 0
+    for r in sorted(acts, key=lambda q: q.get("t", ""), reverse=True):
+        if asked >= ROUTES_PER_RUN:
+            break
+        if r.get("poly") and "pts" not in r:
+            asked += 1
+            try:
+                det = g.get_activity_details(str(r["id"]), maxchart=10, maxpoly=1000) or {}
+                pts = [[round(q["lat"], 5), round(q["lon"], 5)] for q in pick(det, "geoPolylineDTO", "polyline") or []
+                       if isinstance(q, dict) and isinstance(q.get("lat"), (int, float)) and isinstance(q.get("lon"), (int, float))]
+                r["pts"] = sample(pts, 150)
+            except Exception:
+                pass                                          # tried again next run
+    return asked
+
+
 def garmin_history(g, prev_acts, today):
     """Every activity, kept by id; the route of up to ROUTES_PER_RUN more of them."""
     cache = {str(a["id"]): a for a in prev_acts or [] if isinstance(a, dict) and a.get("id") is not None}
@@ -337,20 +356,8 @@ def garmin_history(g, prev_acts, today):
         if "pts" in old:
             r["pts"] = old["pts"]
         cache[str(r["id"])] = r
-    asked = 0
-    for r in sorted(cache.values(), key=lambda q: q.get("t", ""), reverse=True):
-        if asked >= ROUTES_PER_RUN:
-            break
-        if r.get("poly") and "pts" not in r:
-            asked += 1
-            try:
-                det = g.get_activity_details(str(r["id"]), maxchart=10, maxpoly=1000) or {}
-                pts = [[round(q["lat"], 5), round(q["lon"], 5)] for q in pick(det, "geoPolylineDTO", "polyline") or []
-                       if isinstance(q, dict) and isinstance(q.get("lat"), (int, float)) and isinstance(q.get("lon"), (int, float))]
-                r["pts"] = sample(pts, 150)
-            except Exception:
-                pass                                          # tried again next run
-    return sorted(cache.values(), key=lambda q: q.get("t", "")), asked
+    acts = sorted(cache.values(), key=lambda q: q.get("t", ""))
+    return acts, garmin_routes(g, acts)
 
 
 def strava_act_row(q):
@@ -412,7 +419,7 @@ def garmin(sent, kept, today, tz, out, renewed, on_strava=()):
         prev = kept.get(x.get("id")) or {}
         token = prev["tokens"] if prev.get("signedAt") == x.get("signedAt") and prev.get("tokens") else x.get("tokens")
         person = {"id": x.get("id"), "name": x.get("name", ""), "color": x.get("color", "#4da3ff"), "days": [], "hist": []}
-        entry = dict(x, tokens=token, gacts=prev.get("gacts") or [])
+        entry = dict(x, tokens=token, gacts=prev.get("gacts") or [], gactsAt=prev.get("gactsAt", ""))
         hist = prev.get("hist") or prev.get("days") or []
         have = {r.get("d") for r in hist if isinstance(r, dict)}
         recent = [(today - datetime.timedelta(days=k)).isoformat() for k in range(DAYS)]
@@ -429,10 +436,19 @@ def garmin(sent, kept, today, tz, out, renewed, on_strava=()):
             if full:
                 try:
                     entry["gacts"], routes = garmin_history(g, entry["gacts"], today)
+                    entry["gactsAt"] = iso_utc()
                     print("garmin %d: %d activities kept, %d with routes (%d asked this run)" %
                           (n, len(entry["gacts"]), sum(1 for a in entry["gacts"] if a.get("pts")), routes))
                 except Exception as ex:
                     print("garmin %d: activity history not fetched (%s)" % (n, type(ex).__name__))
+            elif any(a.get("poly") and "pts" not in a for a in entry["gacts"]):
+                try:
+                    routes = garmin_routes(g, entry["gacts"])
+                    print("garmin %d: %d more routes asked, %d of %d activities with routes" %
+                          (n, routes, sum(1 for a in entry["gacts"] if a.get("pts")), len(entry["gacts"])))
+                except Exception:
+                    pass
+            if full:
                 if first_name(x.get("name")) in on_strava:
                     since = min(datetime.date(today.year, 1, 1), today - datetime.timedelta(days=14)).isoformat()
                     GARMIN_ACTS[first_name(x.get("name"))] = [{"t": a["t"], "k": a.get("k", ""), "m": round(a.get("m") or 0)}
