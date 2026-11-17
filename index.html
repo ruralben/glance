@@ -322,6 +322,13 @@ html.lightlook .mapwrap .credit{color:#3b4855; text-shadow:none}
      softer shades of it. Colors that carry meaning stay as they are: overdue,
      wet, open, battery level, each calendar's stripe and the cold blue. */
   var CAN_MIX = !!(window.CSS && CSS.supports && CSS.supports("color", "color-mix(in srgb, red 50%, transparent)"));
+  /* A module's own background, when one is picked; see-through otherwise. */
+  function backing(el, m){
+    if(!/^#[0-9a-f]{6}$/i.test(m.bg || "")) return;
+    var a = Math.max(10, Math.min(100, m.bgAlpha == null ? 70 : +m.bgAlpha)) / 100;
+    el.style.background = "rgba(" + [1, 3, 5].map(function(i){ return parseInt(m.bg.substr(i, 2), 16); }).join(",") + "," + a + ")";
+    el.style.borderRadius = "calc(var(--u, 10px) * .8)";
+  }
   function paint(el, color){
     if(!/^#[0-9a-f]{6}$/i.test(color || "")) return;
     el.classList.add("tinted");
@@ -2984,6 +2991,7 @@ html.lightlook .mapwrap .credit{color:#3b4855; text-shadow:none}
         el.style.opacity = String(Math.max(0, Math.min(100, m.opacity == null ? 100 : +m.opacity)) / 100);
         if(m.fontFamily) el.style.fontFamily = family(m.fontFamily);
         paint(el, m.color);
+        backing(el, m);
         box.appendChild(el);
         var rec = {mod:m, el:el, screen:sc.id}, k = KINDS[m.type];
         if(k.mount) k.mount(el, m, rec);
