@@ -320,6 +320,7 @@ GARMIN_ACTS = {}
 # light list of activities and what it has already handed over (hx, hp, hd).
 ROUTES_PER_RUN = 50     # Garmin activities a run whose route and second-by-second numbers are fetched (one request each)
 DETAILS_PER_RUN = 15    # Garmin activities a run whose laps, zones, weather, gear and sets are fetched (3 to 5 requests each)
+STRAVA_EXTRAS_PER_RUN = 70   # Strava requests a full run for the rest: who gave kudos, comments, photos, and each segment's own record
 STRAVA_DETAILS_PER_RUN = 40   # Strava activities a full run whose full record and streams are fetched (two requests each; Strava allows 100 a quarter hour)
 # Who an activity belongs to and its privacy settings: never kept.
 RAW_SKIP = {"ownerId", "ownerDisplayName", "ownerFullName", "ownerProfileImageUrlSmall", "ownerProfileImageUrlMedium",
@@ -366,7 +367,7 @@ def garmin_act_row(a):
 
 def light(r):
     """What this job keeps between runs: the row and its flags, never the heavy parts."""
-    return {k: v for k, v in r.items() if k not in ("x", "pts", "dx", "streams")}
+    return {k: v for k, v in r.items() if k not in ("x", "pts", "dx", "streams", "extra")}
 
 
 def garmin_streams(g, acts, who):
@@ -441,7 +442,8 @@ def garmin_history(g, prev_acts, today, who):
         for q in ("hp", "hd"):
             if old.get(q):
                 r[q] = old[q]
-        if not old.get("hx") or {k: v for k, v in old.items() if k not in ("hx", "hp", "hd")} != r:
+        flags = ("hx", "hp", "hd")
+        if not old.get("hx") or {k: v for k, v in old.items() if k not in flags} != {k: v for k, v in r.items() if k not in flags}:
             hand_over("garmin", who, r, x=compact(a))
         r["hx"] = 1
         cache[str(r["id"])] = r
@@ -629,7 +631,7 @@ def strava(sent, kept, today, tz, out, renewed, full=True):
         refresh = prev["refresh"] if prev.get("signedAt") == x.get("signedAt") and prev.get("refresh") else x.get("refresh")
         person = {"id": x.get("id"), "name": x.get("name", ""), "color": x.get("color", "#ff7a3d"), "goal": x.get("goal")}
         entry = {"id": x.get("id"), "signedAt": x.get("signedAt"), "refresh": refresh, "efforts": prev.get("efforts") or {}, "okAt": prev.get("okAt", ""),
-                 "sacts": prev.get("sacts") or []}
+                 "sacts": prev.get("sacts") or [], "segs": prev.get("segs") or []}
         if not full and prev.get("signedAt") == x.get("signedAt") and prev.get("last") and prev.get("okAt"):
             person.update(prev["last"])
             person["ok"], person["okAt"] = True, prev["okAt"]
@@ -670,9 +672,11 @@ def strava(sent, kept, today, tz, out, renewed, full=True):
                 if r.get("id") is None:
                     continue
                 old = cache.get(str(r["id"])) or {}
-                if old.get("hd"):
-                    r["hd"] = 1
-                if not old.get("hx") or {k: v for k, v in old.items() if k not in ("hx", "hd")} != r:
+                for q in ("hd", "segs", "hxe"):
+                    if q in old:
+                        r[q] = old[q]
+                flags = ("hx", "hd", "segs", "hxe")
+                if not old.get("hx") or {k: v for k, v in old.items() if k not in flags} != {k: v for k, v in r.items() if k not in flags}:
                     hand_over("strava", who, r, x=compact(q))
                 r["hx"] = 1
                 cache[str(r["id"])] = r
@@ -681,7 +685,7 @@ def strava(sent, kept, today, tz, out, renewed, full=True):
             for r in sorted(cache.values(), key=lambda q: q.get("t", ""), reverse=True):
                 if more >= STRAVA_DETAILS_PER_RUN:
                     break
-                if r.get("hd") or r.get("man"):
+                if (r.get("hd") and "segs" in r) or r.get("man"):
                     continue
                 more += 1
                 try:
@@ -694,6 +698,7 @@ def strava(sent, kept, today, tz, out, renewed, full=True):
                 except Exception:
                     streams = None
                 r["hd"] = 1
+                r["segs"] = sorted({pick(q, "segment", "id") for q in full_rec.get("segment_efforts") or [] if pick(q, "segment", "id")})
                 hand_over("strava", who, r, dx=dict(full_rec, at=iso_utc()), streams=streams)
             entry["sacts"] = sorted(cache.values(), key=lambda q: q.get("t", ""))
             print("strava %d: %d activities kept for the explorer, %d with full records (%d this run)" % (n, len(entry["sacts"]), sum(1 for a in entry["sacts"] if a.get("hd")), more))
@@ -721,6 +726,40 @@ def strava(sent, kept, today, tz, out, renewed, full=True):
             if prof:
                 DELTA["strava"].setdefault(x.get("id"), {"name": x.get("name", ""), "color": x.get("color"), "acts": {}})["profile"] = dict(prof, at=iso_utc())
             print("strava %d: profile, totals, zones, gear, clubs and routes: %d parts" % (n, got))
+            # The rest, while Strava still answers: who gave kudos, the comments, the photos
+            # (each activity once), and every segment's own record (each segment once).
+            budget, extras, segs_got = STRAVA_EXTRAS_PER_RUN, 0, {}
+            done_segs = set(entry["segs"])
+            try:
+                for r in sorted(cache.values(), key=lambda q: q.get("t", ""), reverse=True):
+                    if budget < 3:
+                        break
+                    if r.get("hxe") or r.get("man"):
+                        continue
+                    ex = {}
+                    for name, path in (("kudoers", "/activities/%s/kudos?per_page=200"), ("comments", "/activities/%s/comments?per_page=200"),
+                                       ("photos", "/activities/%s/photos?size=2048&photo_sources=true")):
+                        budget -= 1
+                        v = compact(http_json(STRAVA_API + path % r["id"], token=access))
+                        if v not in (None, "", [], {}):
+                            ex[name] = v
+                    r["hxe"] = 1
+                    extras += 1
+                    hand_over("strava", who, r, extra=dict(ex, at=iso_utc()))
+                for sid in sorted({sg for r in cache.values() for sg in r.get("segs") or []} - done_segs):
+                    if budget < 1:
+                        break
+                    budget -= 1
+                    segs_got[str(sid)] = compact(http_json("%s/segments/%s" % (STRAVA_API, sid), token=access))
+                    done_segs.add(sid)
+            except Exception as ex2:
+                print("strava %d: the rest stopped for this run (%s)" % (n, type(ex2).__name__))
+            entry["segs"] = sorted(done_segs)
+            entry["sacts"] = sorted(cache.values(), key=lambda q: q.get("t", ""))
+            if segs_got:
+                DELTA["strava"].setdefault(x.get("id"), {"name": x.get("name", ""), "color": x.get("color"), "acts": {}})["segments"] = segs_got
+            left = sum(1 for r in cache.values() if not r.get("hxe") and not r.get("man")) + len({sg for r in cache.values() for sg in r.get("segs") or []} - done_segs)
+            print("strava %d: kudos, comments and photos for %d more activities, %d more segments; %d left" % (n, extras, len(segs_got), left))
             # Fastest mile and 5K: from each run's best efforts, fetched once.
             eff, asked = entry["efforts"], 0
             for q in reversed(acts):
@@ -831,7 +870,7 @@ def main():
 
     open(a.out, "w", encoding="ascii").write(lock(out, board) + "\n")
     open(a.tokens_out, "w", encoding="ascii").write(lock(renewed, gkey) + "\n")
-    n_delta = sum(len(p["acts"]) + ("profile" in p) for side in DELTA.values() for p in side.values())
+    n_delta = sum(len(p["acts"]) + ("profile" in p) + ("segments" in p) for side in DELTA.values() for p in side.values())
     if a.explore_out and n_delta:
         delta = {"at": out["at"], "garmin": [dict(p, id=i, acts=list(p["acts"].values())) for i, p in DELTA["garmin"].items()],
                  "strava": [dict(p, id=i, acts=list(p["acts"].values())) for i, p in DELTA["strava"].items()]}
