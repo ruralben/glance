@@ -281,8 +281,11 @@ html.lightlook .mapwrap .credit{color:#3b4855; text-shadow:none}
     var i = p.indexOf("="); if(i > 0) hash[p.slice(0, i)] = decodeURIComponent(p.slice(i + 1)); else if(p) hash[p] = "";
   });
   var PREVIEW = "preview" in hash;              /* shown inside the Manager's preview */
+  /* The Manager's Preview tab: "screen" starts on that screen, "hold" stays on
+     it, "step" lets left and right arrows (or the edge arrows) change screens. */
+  var STEP = "step" in hash && !PREVIEW, HOLD = "hold" in hash && !PREVIEW;
 
-  var CONFIG = null, device = null, shown = "", turn = 0, rotor = null;
+  var CONFIG = null, device = null, shown = PREVIEW ? "" : (hash.screen || ""), turn = 0, rotor = null;
   var DATA = { cal:null, wx:null, chores:null, sports:{}, sensors:null };  /* what the modules draw from */
   var mods = [];                                 /* {mod, el, screen, tick} currently mounted */
   var TAGS = null;                               /* canvas preview only: calendar name -> tag */
@@ -2955,6 +2958,7 @@ html.lightlook .mapwrap .credit{color:#3b4855; text-shadow:none}
     markRotated();
     var want = (device && device.screens && device.screens.length) ? device.screens.slice() : (CONFIG.screens[0] ? [CONFIG.screens[0].id] : []);
     loop = want.filter(function(id){ return CONFIG.screens.some(function(s){ return s.id === id; }); });
+    if(hash.screen && !PREVIEW && want.indexOf(hash.screen) < 0) want.push(hash.screen);   /* a screen asked for by name, even off the loop */
     /* A button can lead to a screen that is not part of this device's loop,
        so build every screen a button on a built screen points to as well. */
     for(var n = 0; n < want.length; n++) CONFIG.screens.forEach(function(sc){
@@ -3006,7 +3010,7 @@ html.lightlook .mapwrap .credit{color:#3b4855; text-shadow:none}
   function startLoop(){
     clearTimeout(rotor);
     var secs = secondsFor(shown);
-    if(PREVIEW || loop.length < 2 || secs < 3) return;
+    if(PREVIEW || HOLD || loop.length < 2 || secs < 3) return;
     rotor = setTimeout(function(){
       var at = loop.indexOf(shown);
       turn = ((at >= 0 ? at : turn) + 1) % loop.length;
@@ -3021,7 +3025,7 @@ html.lightlook .mapwrap .credit{color:#3b4855; text-shadow:none}
     startLoop();
   }
   function show(id){
-    shown = id;
+    shown = id; if(STEP) stepNote();
     Array.prototype.forEach.call(stage.querySelectorAll(".screen"), function(s){ s.classList.toggle("on", s.dataset.id === id); });
     measure();
     /* With a remote in use, keep a button highlighted so OK always has a target. */
@@ -3031,7 +3035,50 @@ html.lightlook .mapwrap .credit{color:#3b4855; text-shadow:none}
      highlight between the buttons on the screen; OK presses the highlighted
      one. With a single button on the screen, OK presses it straight away. */
   var remoteUsed = false;
+  /* Stepping through the screens by hand (the Manager's Preview tab). */
+  function stepTo(d){
+    var all = loop.slice();
+    [hash.screen, shown].forEach(function(id){   /* the screen it opened on stays in reach when it is off the loop */
+      if(id && all.indexOf(id) < 0 && stage.querySelector('.screen[data-id="' + id + '"]')) all.unshift(id); });
+    if(all.length < 2) return;
+    var at = all.indexOf(shown), next = all[((at < 0 ? 0 : at + d) + all.length) % all.length];
+    if(loop.indexOf(next) >= 0) turn = loop.indexOf(next);
+    show(next); startLoop();
+  }
+  var stepUI = null, stepFade = null;
+  function stepNote(){
+    if(!STEP) return;
+    if(!stepUI){
+      var css = document.createElement("style");
+      css.textContent = ".stepbtn{position:fixed; top:50%; transform:translateY(-50%); z-index:50; width:56px; height:96px; border:0; border-radius:12px; background:rgba(0,0,0,.45); color:#fff; font:600 34px/1 system-ui,sans-serif; cursor:pointer; opacity:0; transition:opacity .3s}" +
+        ".stepbtn.l{left:12px} .stepbtn.r{right:12px} .stepchip{position:fixed; left:50%; bottom:14px; transform:translateX(-50%); z-index:50; background:rgba(0,0,0,.6); color:#fff; font:500 15px/1.3 system-ui,sans-serif; padding:6px 14px; border-radius:999px; opacity:0; transition:opacity .3s; white-space:nowrap; pointer-events:none}" +
+        ".stepon .stepbtn, .stepon .stepchip{opacity:1} .stepbtn:focus-visible{outline:2px solid #fff}";
+      document.head.appendChild(css);
+      stepUI = {l:document.createElement("button"), r:document.createElement("button"), chip:document.createElement("div")};
+      stepUI.l.className = "stepbtn l"; stepUI.l.textContent = "\u2039"; stepUI.l.setAttribute("aria-label", "Previous screen");
+      stepUI.r.className = "stepbtn r"; stepUI.r.textContent = "\u203A"; stepUI.r.setAttribute("aria-label", "Next screen");
+      stepUI.chip.className = "stepchip";
+      stepUI.l.addEventListener("click", function(){ stepTo(-1); });
+      stepUI.r.addEventListener("click", function(){ stepTo(1); });
+      document.body.appendChild(stepUI.l); document.body.appendChild(stepUI.r); document.body.appendChild(stepUI.chip);
+      document.addEventListener("mousemove", stepWake);
+    }
+    var sc = (CONFIG && CONFIG.screens || []).filter(function(x){ return x.id === shown; })[0];
+    var at = loop.indexOf(shown);
+    stepUI.chip.textContent = (sc ? sc.name || "Screen" : "Screen") + (at >= 0 ? "  \u00B7  " + (at + 1) + " of " + loop.length : "  \u00B7  not in this device's loop") +
+      "  \u00B7  " + (HOLD ? "Held (Space carries on)" : "Looping (Space holds)");
+    stepWake();
+  }
+  function stepWake(){
+    document.body.classList.add("stepon");
+    clearTimeout(stepFade); stepFade = setTimeout(function(){ document.body.classList.remove("stepon"); }, 2500);
+  }
   window.addEventListener("keydown", function(e){
+    if(STEP){
+      var k = e.key;
+      if(k === "ArrowRight" || k === "PageDown" || k === "ArrowLeft" || k === "PageUp"){ e.preventDefault(); stepTo(k === "ArrowRight" || k === "PageDown" ? 1 : -1); return; }
+      if(k === " " && (!document.activeElement || !/^(BUTTON|A|INPUT)$/.test(document.activeElement.tagName))){ e.preventDefault(); HOLD = !HOLD; startLoop(); stepNote(); return; }
+    }
     if(PREVIEW) return;
     /* Up and down belong to a hand-scrolled calendar when there is one with
        more to show; buttons are then reached with left and right. */
