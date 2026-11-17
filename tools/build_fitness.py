@@ -290,7 +290,7 @@ def due(prev, sent_at):
     full run, a fresh sign-in from the Manager, nothing kept yet, or a last run
     that failed (so the next one catches up on whatever it missed), or the
     explorer's activity history not fetched yet."""
-    if prev.get("failed") or not prev.get("gactsAt") or prev.get("signedAt") != sent_at or not prev.get("fullAt") or not (prev.get("hist") or prev.get("days")):
+    if prev.get("failed") or not prev.get("gactsAt") or any(not a.get("hx") for a in prev.get("gacts") or []) or prev.get("signedAt") != sent_at or not prev.get("fullAt") or not (prev.get("hist") or prev.get("days")):
         return True
     try:
         last = datetime.datetime.fromisoformat(str(prev["fullAt"]).replace("Z", "+00:00"))
@@ -307,12 +307,50 @@ def due(prev, sent_at):
 GARMIN_ACTS = {}
 
 # ------------------------------------------------ the explorer's history ----
-# For the Fitness Explorer: every Garmin and Strava activity each person has,
-# with its route, kept between runs and published locked (with GARMIN_KEY, not
-# the display key: the TV never needs it) as explore.enc. Fetched on full runs:
-# the whole history the first time, the last 30 days after that, and up to
-# ROUTES_PER_RUN Garmin routes a run (one request each) until all are in.
-ROUTES_PER_RUN = 15
+# For the Fitness Explorer, everything Garmin and Strava keep about each
+# activity: the full summary, the route at full detail, the second-by-second
+# heart rate, speed, elevation and the rest, laps, heart rate zones, weather,
+# gear and strength sets; from Strava the full record and its streams.
+#
+# That is far too much to carry through the public fitness branch on every
+# run, so it travels once: each run puts only what it fetched new into
+# explore-delta.enc (locked with GARMIN_KEY), which the job keeps as a run
+# artifact for 90 days, and the Manager collects every one into the copy on
+# the PC, which keeps everything for good. Between runs this job keeps only a
+# light list of activities and what it has already handed over (hx, hp, hd).
+ROUTES_PER_RUN = 50     # Garmin activities a run whose route and second-by-second numbers are fetched (one request each)
+DETAILS_PER_RUN = 15    # Garmin activities a run whose laps, zones, weather, gear and sets are fetched (3 to 5 requests each)
+STRAVA_DETAILS_PER_RUN = 40   # Strava activities a full run whose full record and streams are fetched (two requests each; Strava allows 100 a quarter hour)
+# Who an activity belongs to and its privacy settings: never kept.
+RAW_SKIP = {"ownerId", "ownerDisplayName", "ownerFullName", "ownerProfileImageUrlSmall", "ownerProfileImageUrlMedium",
+            "ownerProfileImageUrlLarge", "userRoles", "privacy", "athlete", "userProfilePk", "userProfileId"}
+DELTA = {"garmin": {}, "strava": {}}    # what this run hands over: side -> person id -> {name, color, acts: {id: row}}
+
+
+def compact(v):
+    """An answer from Garmin or Strava, whole, without empty values or who it belongs to; floats rounded."""
+    if isinstance(v, float):
+        return round(v, 5)
+    if isinstance(v, dict):
+        out = {}
+        for k, x in v.items():
+            if k in RAW_SKIP:
+                continue
+            x = compact(x)
+            if x not in (None, "", [], {}):
+                out[k] = x
+        return out
+    if isinstance(v, list):
+        return [compact(x) for x in v]
+    return v
+
+
+def hand_over(side, who, row, **parts):
+    """Add to this run's delta: the activity's light row plus the heavy parts fetched for it."""
+    p = DELTA[side].setdefault(who.get("id"), {"name": who.get("name", ""), "color": who.get("color"), "acts": {}})
+    d = p["acts"].setdefault(str(row["id"]), {})
+    d.update({k: v for k, v in row.items() if k not in ("hx", "hp", "hd")})
+    d.update({k: v for k, v in parts.items() if v not in (None, "", [], {})})
 
 
 def garmin_act_row(a):
@@ -326,38 +364,88 @@ def garmin_act_row(a):
     return {k: (round(v, 2) if isinstance(v, float) else v) for k, v in r.items() if v not in (None, "")}
 
 
-def garmin_routes(g, acts):
-    """The route of up to ROUTES_PER_RUN activities that have one and do not have it here yet, newest first."""
+def light(r):
+    """What this job keeps between runs: the row and its flags, never the heavy parts."""
+    return {k: v for k, v in r.items() if k not in ("x", "pts", "dx", "streams")}
+
+
+def garmin_streams(g, acts, who):
+    """Route at full detail and the second-by-second numbers, from one request per activity."""
     asked = 0
     for r in sorted(acts, key=lambda q: q.get("t", ""), reverse=True):
         if asked >= ROUTES_PER_RUN:
             break
-        if r.get("poly") and "pts" not in r:
-            asked += 1
-            try:
-                det = g.get_activity_details(str(r["id"]), maxchart=10, maxpoly=1000) or {}
-                pts = [[round(q["lat"], 5), round(q["lon"], 5)] for q in pick(det, "geoPolylineDTO", "polyline") or []
-                       if isinstance(q, dict) and isinstance(q.get("lat"), (int, float)) and isinstance(q.get("lon"), (int, float))]
-                r["pts"] = sample(pts, 150)
-            except Exception:
-                pass                                          # tried again next run
+        if r.get("hp"):
+            continue
+        asked += 1
+        try:
+            det = g.get_activity_details(str(r["id"]), maxchart=2000, maxpoly=4000) or {}
+        except Exception:
+            continue                                          # tried again next run
+        pts = []
+        for q in pick(det, "geoPolylineDTO", "polyline") or []:
+            if isinstance(q, dict) and isinstance(q.get("lat"), (int, float)) and isinstance(q.get("lon"), (int, float)):
+                pts.append([round(q["lat"], 6), round(q["lon"], 6)] + ([round(q["altitude"], 1)] if isinstance(q.get("altitude"), (int, float)) else []))
+        keys = [[d.get("key"), pick(d, "unit", "key")] for d in sorted(det.get("metricDescriptors") or [], key=lambda d: d.get("metricsIndex", 0))]
+        rows = [[round(v, 5) if isinstance(v, float) else v for v in (m.get("metrics") or [])] for m in det.get("activityDetailMetrics") or []]
+        r["hp"] = 1
+        hand_over("garmin", who, r, pts=pts, streams={"keys": keys, "rows": rows} if rows else None)
     return asked
 
 
-def garmin_history(g, prev_acts, today):
-    """Every activity, kept by id; the route of up to ROUTES_PER_RUN more of them."""
-    cache = {str(a["id"]): a for a in prev_acts or [] if isinstance(a, dict) and a.get("id") is not None}
-    since = "2000-01-01" if not cache else (today - datetime.timedelta(days=30)).isoformat()
+def garmin_details(g, acts, who):
+    """Laps, time in each heart rate zone, the weather, the gear, and for strength
+    work every set; each Garmin's whole answer. One request each."""
+    asked = 0
+    for r in sorted(acts, key=lambda q: q.get("t", ""), reverse=True):
+        if asked >= DETAILS_PER_RUN:
+            break
+        if r.get("hd"):
+            continue
+        asked += 1
+        i, k, dx = str(r["id"]), str(r.get("k") or ""), {}
+        def ask(name, f):
+            try:
+                v = compact(f())
+                if v not in (None, "", [], {}):
+                    dx[name] = v
+            except Exception:
+                pass
+        ask("zones", lambda: g.get_activity_hr_in_timezones(i))
+        ask("splits", lambda: g.get_activity_splits(i))
+        ask("typed", lambda: g.get_activity_typed_splits(i))
+        if r.get("lat") is not None:
+            ask("weather", lambda: g.get_activity_weather(i))
+        ask("gear", lambda: g.get_activity_gear(i))
+        if any(w in k for w in ("strength", "hiit", "cardio", "fitness_equipment", "training", "yoga", "pilates")):
+            ask("sets", lambda: g.get_activity_exercise_sets(i))
+        r["hd"] = 1
+        hand_over("garmin", who, r, dx=dict(dx, at=iso_utc()))
+    return asked
+
+
+def garmin_history(g, prev_acts, today, who):
+    """Every activity, kept by id. The whole list the first time (and once more for
+    anything kept before the full summaries were); the last 30 days after that.
+    A summary new or changed since the last run is handed over whole."""
+    cache = {str(a["id"]): light(a) for a in prev_acts or [] if isinstance(a, dict) and a.get("id") is not None}
+    for a in cache.values():                                  # kept before everything was handed over whole: fetch it all again
+        if not a.get("hx"):
+            a.pop("hp", None); a.pop("hd", None)
+    since = "2000-01-01" if not cache or any(not a.get("hx") for a in cache.values()) else (today - datetime.timedelta(days=30)).isoformat()
     for a in g.get_activities_by_date(since, today.isoformat()) or []:
         r = garmin_act_row(a)
         if r.get("id") is None:
             continue
         old = cache.get(str(r["id"])) or {}
-        if "pts" in old:
-            r["pts"] = old["pts"]
+        for q in ("hp", "hd"):
+            if old.get(q):
+                r[q] = old[q]
+        if not old.get("hx") or {k: v for k, v in old.items() if k not in ("hx", "hp", "hd")} != r:
+            hand_over("garmin", who, r, x=compact(a))
+        r["hx"] = 1
         cache[str(r["id"])] = r
-    acts = sorted(cache.values(), key=lambda q: q.get("t", ""))
-    return acts, garmin_routes(g, acts)
+    return sorted(cache.values(), key=lambda q: q.get("t", ""))
 
 
 def strava_act_row(q):
@@ -435,19 +523,18 @@ def garmin(sent, kept, today, tz, out, renewed, on_strava=()):
             fresh = insights(g, recent[0]) if full else {}
             if full:
                 try:
-                    entry["gacts"], routes = garmin_history(g, entry["gacts"], today)
+                    entry["gacts"] = garmin_history(g, entry["gacts"], today, x)
                     entry["gactsAt"] = iso_utc()
-                    print("garmin %d: %d activities kept, %d with routes (%d asked this run)" %
-                          (n, len(entry["gacts"]), sum(1 for a in entry["gacts"] if a.get("pts")), routes))
                 except Exception as ex:
                     print("garmin %d: activity history not fetched (%s)" % (n, type(ex).__name__))
-            elif any(a.get("poly") and "pts" not in a for a in entry["gacts"]):
+            entry["gacts"] = [light(a) for a in entry["gacts"]]
+            if any(not a.get("hp") or not a.get("hd") for a in entry["gacts"]):
                 try:
-                    routes = garmin_routes(g, entry["gacts"])
-                    print("garmin %d: %d more routes asked, %d of %d activities with routes" %
-                          (n, routes, sum(1 for a in entry["gacts"] if a.get("pts")), len(entry["gacts"])))
-                except Exception:
-                    pass
+                    routes, more = garmin_streams(g, entry["gacts"], x), garmin_details(g, entry["gacts"], x)
+                    print("garmin %d: %d activities; %d more with route and second-by-second numbers (%d done), %d more with laps, zones, weather, gear and sets (%d done)" %
+                          (n, len(entry["gacts"]), routes, sum(1 for a in entry["gacts"] if a.get("hp")), more, sum(1 for a in entry["gacts"] if a.get("hd"))))
+                except Exception as ex:
+                    print("garmin %d: activity details not fetched (%s)" % (n, type(ex).__name__))
             if full:
                 if first_name(x.get("name")) in on_strava:
                     since = min(datetime.date(today.year, 1, 1), today - datetime.timedelta(days=14)).isoformat()
@@ -564,21 +651,76 @@ def strava(sent, kept, today, tz, out, renewed, full=True):
                 if len(got) < 200:
                     break
             acts.sort(key=lambda q: q.get("start_date") or "")
-            # The explorer's history: every activity ever, the first time; this run's after that.
-            cache = {str(a["id"]): a for a in entry["sacts"] if isinstance(a, dict) and a.get("id") is not None}
+            # The explorer's history: every activity ever, the first time (and once more for
+            # anything kept before summaries were handed over whole); this run's after that.
+            cache = {str(a["id"]): light(a) for a in entry["sacts"] if isinstance(a, dict) and a.get("id") is not None}
+            for a in cache.values():
+                if not a.get("hx"):
+                    a.pop("hd", None)
             older = []
-            if not cache:
+            if not cache or any(not a.get("hx") for a in cache.values()):
                 for page in range(1, 11):
                     got = http_json("%s/athlete/activities?before=%d&per_page=200&page=%d" % (STRAVA_API, int(after), page), token=access)
                     older += got
                     if len(got) < 200:
                         break
+            who = {"id": x.get("id"), "name": x.get("name", ""), "color": x.get("color")}
             for q in older + acts:
                 r = strava_act_row(q)
-                if r.get("id") is not None:
-                    cache[str(r["id"])] = r
+                if r.get("id") is None:
+                    continue
+                old = cache.get(str(r["id"])) or {}
+                if old.get("hd"):
+                    r["hd"] = 1
+                if not old.get("hx") or {k: v for k, v in old.items() if k not in ("hx", "hd")} != r:
+                    hand_over("strava", who, r, x=compact(q))
+                r["hx"] = 1
+                cache[str(r["id"])] = r
+            # Each activity's full record and its streams, newest first, ten a full run.
+            more = 0
+            for r in sorted(cache.values(), key=lambda q: q.get("t", ""), reverse=True):
+                if more >= STRAVA_DETAILS_PER_RUN:
+                    break
+                if r.get("hd") or r.get("man"):
+                    continue
+                more += 1
+                try:
+                    full_rec = compact(http_json("%s/activities/%s?include_all_efforts=true" % (STRAVA_API, r["id"]), token=access))
+                except Exception:
+                    break                                     # likely the rate limit: next run
+                try:
+                    streams = compact(http_json("%s/activities/%s/streams?keys=time,distance,latlng,altitude,velocity_smooth,heartrate,cadence,watts,temp,moving,grade_smooth&key_by_type=true"
+                                                % (STRAVA_API, r["id"]), token=access))
+                except Exception:
+                    streams = None
+                r["hd"] = 1
+                hand_over("strava", who, r, dx=dict(full_rec, at=iso_utc()), streams=streams)
             entry["sacts"] = sorted(cache.values(), key=lambda q: q.get("t", ""))
-            print("strava %d: %d activities kept for the explorer" % (n, len(entry["sacts"])))
+            print("strava %d: %d activities kept for the explorer, %d with full records (%d this run)" % (n, len(entry["sacts"]), sum(1 for a in entry["sacts"] if a.get("hd")), more))
+            # The rest of what Strava keeps about the person: profile, totals, zones, gear, clubs, saved routes and starred segments.
+            prof, got = {}, 0
+            def get(name, path):
+                nonlocal got
+                try:
+                    v = compact(http_json(STRAVA_API + path, token=access))
+                    if v not in (None, "", [], {}):
+                        prof[name] = v
+                        got += 1
+                except Exception:
+                    pass
+            get("athlete", "/athlete")
+            aid = pick(prof, "athlete", "id")
+            if aid:
+                get("stats", "/athletes/%s/stats" % aid)
+                get("routes", "/athletes/%s/routes?per_page=200" % aid)
+            get("zones", "/athlete/zones")
+            get("clubs", "/athlete/clubs?per_page=200")
+            get("starred", "/segments/starred?per_page=200")
+            for gid in [b.get("id") for b in (pick(prof, "athlete", "bikes") or []) + (pick(prof, "athlete", "shoes") or []) if isinstance(b, dict)][:20]:
+                get("gear_" + str(gid), "/gear/%s" % gid)
+            if prof:
+                DELTA["strava"].setdefault(x.get("id"), {"name": x.get("name", ""), "color": x.get("color"), "acts": {}})["profile"] = dict(prof, at=iso_utc())
+            print("strava %d: profile, totals, zones, gear, clubs and routes: %d parts" % (n, got))
             # Fastest mile and 5K: from each run's best efforts, fetched once.
             eff, asked = entry["efforts"], 0
             for q in reversed(acts):
@@ -689,13 +831,12 @@ def main():
 
     open(a.out, "w", encoding="ascii").write(lock(out, board) + "\n")
     open(a.tokens_out, "w", encoding="ascii").write(lock(renewed, gkey) + "\n")
-    if a.explore_out:
-        sv_names = {p.get("id"): p for p in (out.get("strava") or {}).get("people") or []}
-        explore = {"at": out["at"],
-                   "garmin": [{"id": e.get("id"), "name": e.get("name", ""), "color": e.get("color"), "acts": e.get("gacts") or []} for e in renewed["accounts"]],
-                   "strava": [{"id": e.get("id"), "name": (sv_names.get(e.get("id")) or {}).get("name", ""), "color": (sv_names.get(e.get("id")) or {}).get("color"),
-                               "acts": e.get("sacts") or []} for e in renewed.get("strava") or []]}
-        open(a.explore_out, "w", encoding="ascii").write(lock(explore, gkey) + "\n")
+    n_delta = sum(len(p["acts"]) + ("profile" in p) for side in DELTA.values() for p in side.values())
+    if a.explore_out and n_delta:
+        delta = {"at": out["at"], "garmin": [dict(p, id=i, acts=list(p["acts"].values())) for i, p in DELTA["garmin"].items()],
+                 "strava": [dict(p, id=i, acts=list(p["acts"].values())) for i, p in DELTA["strava"].items()]}
+        open(a.explore_out, "w", encoding="ascii").write(lock(delta, gkey) + "\n")
+        print("explorer: %d activities handed over this run" % n_delta)
     print("garmin: %d of %d accounts fetched; strava: %d of %d" % (ok_g, n_g, ok_s, n_s))
     if n_g + n_s and not ok_g + ok_s:
         sys.exit(1)
