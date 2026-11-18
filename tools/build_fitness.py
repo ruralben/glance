@@ -55,6 +55,9 @@ INS_DAYS = 7      # an insight older than this (say, HRV from a night the watch 
 INS_KEEP = {"vo2": 60, "fage": 60}   # these change slowly and are measured seldom (VO2 max needs an outdoor walk or run)
 FULL_EVERY = 50   # minutes between full runs
 STEP = 15         # minutes between points on today's curves
+PAST_PER_RUN = 8  # past days a run fetches whole for the explorer, going back to the first day the watch has (about 11 requests each)
+PAST_EMPTY = 60   # this many empty days in a row is taken as the start of the watch's record
+YESTERDAY_UNTIL = 12   # until this hour, each run also fetches yesterday's curves again (evening hours sync late)
 STRAVA_API = "https://www.strava.com/api/v3"
 EFFORTS_PER_RUN = 25   # runs whose best efforts are fetched per job run (Strava allows 100 calls a quarter hour)
 
@@ -187,6 +190,21 @@ def detail(g, d, tz, sleep_raw):
     except Exception:
         pass
     return {k: v for k, v in out.items() if v not in (None, [])}
+
+
+def past_day(g, d, tz):
+    """Everything for one past day, for the explorer: the day's numbers, the
+    curves through the day, that morning's sleep stages, and the watch's
+    readings. None when Garmin has nothing for the day. Raises when Garmin
+    does not answer, so the day is tried again next run rather than skipped."""
+    rows, sleep_raw = fetch(g, [d], d)
+    row = {k: v for k, v in (rows[0] if rows else {}).items() if k in KEEP and v is not None}
+    curve = detail(g, d, tz, sleep_raw)
+    ins = insights(g, d)
+    if len(row) <= 1 and not curve and not ins:
+        g.get_user_summary(d)          # an empty day, or Garmin not answering: this raises if it is the second
+        return None
+    return {"r": row, "c": curve, "i": ins}
 
 
 def num(v):
@@ -510,6 +528,8 @@ def garmin(sent, kept, today, tz, out, renewed, on_strava=()):
         token = prev["tokens"] if prev.get("signedAt") == x.get("signedAt") and prev.get("tokens") else x.get("tokens")
         person = {"id": x.get("id"), "name": x.get("name", ""), "color": x.get("color", "#4da3ff"), "days": [], "hist": []}
         entry = dict(x, tokens=token, gacts=prev.get("gacts") or [], gactsAt=prev.get("gactsAt", ""))
+        if prev.get("back"):
+            entry["back"] = prev["back"]           # how far back the explorer's past days have got
         hist = prev.get("hist") or prev.get("days") or []
         have = {r.get("d") for r in hist if isinstance(r, dict)}
         recent = [(today - datetime.timedelta(days=k)).isoformat() for k in range(DAYS)]
@@ -548,6 +568,36 @@ def garmin(sent, kept, today, tz, out, renewed, on_strava=()):
             # every day's even when the PC was off all that day.
             day = DELTA["garmin"].setdefault(x.get("id"), {"name": x.get("name", ""), "color": x.get("color"), "acts": {}})
             day["today"], day["ins"] = person["today"], person["ins"]
+            # Past days, for the explorer: yesterday again until midday (a watch
+            # often syncs its evening the next morning), and then, walking back a
+            # few days each run, every day Garmin has, until PAST_EMPTY empty days
+            # in a row mark the start of the watch's record. Only the hand-over
+            # carries them; the copy on the PC keeps them.
+            past = {}
+            try:
+                yd = (today - datetime.timedelta(days=1)).isoformat()
+                if datetime.datetime.now(tz).hour < YESTERDAY_UNTIL:
+                    c = detail(g, yd, tz, g.get_sleep_data(yd) or {})
+                    if c:
+                        past[yd] = {"c": c}
+                back = entry.setdefault("back", {"next": (today - datetime.timedelta(days=2)).isoformat(), "empty": 0, "n": 0})
+                for _ in range(PAST_PER_RUN if not back.get("done") else 0):
+                    d = back["next"]
+                    got = past_day(g, d, tz)
+                    if got:
+                        past[d] = got
+                        back["empty"], back["n"] = 0, back.get("n", 0) + 1
+                    else:
+                        back["empty"] = back.get("empty", 0) + 1
+                    back["next"] = (datetime.date.fromisoformat(d) - datetime.timedelta(days=1)).isoformat()
+                    if back["empty"] >= PAST_EMPTY or back["next"] < "2005-01-01":
+                        back["done"] = True
+                        break
+                print("garmin %d: %d past days handed over this run; %d so far, %s" % (n, len(past), back.get("n", 0), "the watch's whole record is in" if back.get("done") else "still going back"))
+            except Exception as ex:
+                print("garmin %d: past days stopped for this run (%s)" % (n, type(ex).__name__))
+            if past:
+                day["past"] = past
             entry["tokens"] = g.client.dumps()
             person["ok"], person["okAt"] = True, iso_utc()
             if full:
@@ -875,12 +925,12 @@ def main():
 
     open(a.out, "w", encoding="ascii").write(lock(out, board) + "\n")
     open(a.tokens_out, "w", encoding="ascii").write(lock(renewed, gkey) + "\n")
-    n_delta = sum(len(p["acts"]) + ("profile" in p) + ("segments" in p) + ("today" in p) for side in DELTA.values() for p in side.values())
+    n_delta = sum(len(p["acts"]) + ("profile" in p) + ("segments" in p) + ("today" in p) + len(p.get("past") or {}) for side in DELTA.values() for p in side.values())
     if a.explore_out and n_delta:
         delta = {"at": out["at"], "garmin": [dict(p, id=i, acts=list(p["acts"].values())) for i, p in DELTA["garmin"].items()],
                  "strava": [dict(p, id=i, acts=list(p["acts"].values())) for i, p in DELTA["strava"].items()]}
         open(a.explore_out, "w", encoding="ascii").write(lock(delta, gkey) + "\n")
-        print("explorer: %d items handed over this run (activities, profiles, and each person's day)" % n_delta)
+        print("explorer: %d items handed over this run (activities, profiles, each person's day and past days)" % n_delta)
     print("garmin: %d of %d accounts fetched; strava: %d of %d" % (ok_g, n_g, ok_s, n_s))
     if n_g + n_s and not ok_g + ok_s:
         sys.exit(1)
